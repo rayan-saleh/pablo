@@ -8,6 +8,7 @@ import type {
   ActiveAnimationData,
   ScrollTriggerData,
   GsapData,
+  DomMutationRecording,
 } from '../shared/types';
 
 const MAX_SUBTREE_ELEMENTS = 200;
@@ -397,7 +398,14 @@ function generateSummary(data: Partial<AnimationData>): string {
     if (data.gsap.recordedTweens && data.gsap.recordedTweens.length > 0) {
       gsapParts.push(`${data.gsap.recordedTweens.length} recorded tween(s)`);
     }
+    if (data.gsap.timelineTree) {
+      gsapParts.push(`timeline tree captured (${data.gsap.timelineTree.children.length} children)`);
+    }
     parts.push(gsapParts.join(', '));
+  }
+
+  if (data.domRecording) {
+    parts.push(`DOM mutation recording: ${data.domRecording.mutations.length} mutation(s) over ${data.domRecording.duration}ms`);
   }
 
   return parts.join('. ') + (parts.length > 0 ? '.' : '');
@@ -507,6 +515,9 @@ export function mergeAnimationData(
   if (partial.gsap?.detected) {
     merged.gsap = partial.gsap;
   }
+  if (partial.domRecording) {
+    merged.domRecording = partial.domRecording;
+  }
 
   // Check if there's any data at all
   const hasData =
@@ -518,7 +529,8 @@ export function mergeAnimationData(
     merged.scrollTriggers.length > 0 ||
     merged.framerMotion.length > 0 ||
     merged.webflowIX2.length > 0 ||
-    merged.gsap?.detected;
+    merged.gsap?.detected ||
+    merged.domRecording;
 
   if (!hasData) return undefined;
 

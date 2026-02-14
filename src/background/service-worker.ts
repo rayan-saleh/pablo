@@ -19,6 +19,11 @@ function installGsapRecorderInMainWorld(): void {
   w.__cc_gsap_recorded = recorded;
   const MAX_ENTRIES = 100;
 
+  // Timeline hierarchy tracking
+  let timelineIdCounter = 0;
+  const timelineRegistry: Record<string, { vars: any; children: any[] }> = {};
+  w.__cc_gsap_timelines = timelineRegistry;
+
   function describeTarget(target: any): string {
     if (typeof target === 'string') return target;
     if (target instanceof Element) {
@@ -65,7 +70,7 @@ function installGsapRecorderInMainWorld(): void {
     return result;
   }
 
-  function record(type: string, target: any, vars: any, fromVars?: any, position?: any) {
+  function record(type: string, target: any, vars: any, fromVars?: any, position?: any, parentTimelineId?: string) {
     if (recorded.length >= MAX_ENTRIES) return;
     const entry: any = {
       type,
@@ -78,12 +83,38 @@ function installGsapRecorderInMainWorld(): void {
     if (vars?.stagger != null) entry.stagger = vars.stagger;
     if (position != null) entry.timelinePosition = position;
     if (fromVars) entry.fromProperties = sanitizeVars(fromVars);
+    if (parentTimelineId) entry.parentTimelineId = parentTimelineId;
     recorded.push(entry);
+
+    // Register as child of parent timeline
+    if (parentTimelineId && timelineRegistry[parentTimelineId]) {
+      timelineRegistry[parentTimelineId].children.push({
+        type: 'tween',
+        target: entry.target,
+        tweenType: type,
+        properties: entry.properties,
+        position: position,
+        duration: entry.duration,
+        ease: entry.ease,
+      });
+    }
   }
 
   function wrapGsap(gsap: any): void {
     if (gsap.__cc_wrapped) return;
     gsap.__cc_wrapped = true;
+
+    // Wrap gsap.timeline() to assign IDs and track hierarchy
+    const origTimeline = gsap.timeline;
+    if (typeof origTimeline === 'function') {
+      gsap.timeline = function(vars?: any) {
+        const tl = origTimeline.call(gsap, vars);
+        const id = 'tl_' + (timelineIdCounter++);
+        tl.__cc_id = id;
+        timelineRegistry[id] = { vars: sanitizeVars(vars || {}), children: [] };
+        return tl;
+      };
+    }
 
     // Wrap gsap static methods (gsap.to, gsap.from, gsap.fromTo, gsap.set)
     const origTo = gsap.to;
@@ -118,21 +149,81 @@ function installGsapRecorderInMainWorld(): void {
       const tlSet = proto.set;
 
       proto.to = function(targets: any, vars: any, position?: any) {
-        record('to', targets, vars, undefined, position);
+        record('to', targets, vars, undefined, position, this.__cc_id);
         return tlTo.call(this, targets, vars, position);
       };
       proto.from = function(targets: any, vars: any, position?: any) {
-        record('from', targets, vars, undefined, position);
+        record('from', targets, vars, undefined, position, this.__cc_id);
         return tlFrom.call(this, targets, vars, position);
       };
       proto.fromTo = function(targets: any, fromVars: any, toVars: any, position?: any) {
-        record('fromTo', targets, toVars, fromVars, position);
+        record('fromTo', targets, toVars, fromVars, position, this.__cc_id);
         return tlFromTo.call(this, targets, fromVars, toVars, position);
       };
       proto.set = function(targets: any, vars: any, position?: any) {
-        record('set', targets, vars, undefined, position);
+        record('set', targets, vars, undefined, position, this.__cc_id);
         return tlSet.call(this, targets, vars, position);
       };
+
+      // Wrap Timeline.prototype.add() — captures nested timelines and callback functions
+      const tlAdd = proto.add;
+      if (typeof tlAdd === 'function') {
+        proto.add = function(child: any, position?: any) {
+          if (this.__cc_id && timelineRegistry[this.__cc_id]) {
+            if (child && child.__cc_id) {
+              // Nested timeline
+              timelineRegistry[this.__cc_id].children.push({
+                type: 'timeline',
+                timelineId: child.__cc_id,
+                position: position,
+                children: timelineRegistry[child.__cc_id]?.children || [],
+              });
+            } else if (typeof child === 'function') {
+              // Callback function
+              let src = '';
+              try { src = child.toString().slice(0, 500); } catch { /* */ }
+              timelineRegistry[this.__cc_id].children.push({
+                type: 'callback',
+                callbackSource: src,
+                position: position,
+              });
+            }
+          }
+          return tlAdd.call(this, child, position);
+        };
+      }
+
+      // Wrap Timeline.prototype.call() — captures function calls at timeline positions
+      const tlCall = proto.call;
+      if (typeof tlCall === 'function') {
+        proto.call = function(fn: any, params?: any, position?: any) {
+          if (this.__cc_id && timelineRegistry[this.__cc_id] && typeof fn === 'function') {
+            let src = '';
+            try { src = fn.toString().slice(0, 500); } catch { /* */ }
+            timelineRegistry[this.__cc_id].children.push({
+              type: 'callback',
+              callbackSource: src,
+              position: position,
+            });
+          }
+          return tlCall.call(this, fn, params, position);
+        };
+      }
+
+      // Wrap Timeline.prototype.addLabel() — captures label names and positions
+      const tlAddLabel = proto.addLabel;
+      if (typeof tlAddLabel === 'function') {
+        proto.addLabel = function(label: string, position?: any) {
+          if (this.__cc_id && timelineRegistry[this.__cc_id]) {
+            timelineRegistry[this.__cc_id].children.push({
+              type: 'label',
+              labelName: label,
+              position: position,
+            });
+          }
+          return tlAddLabel.call(this, label, position);
+        };
+      }
     }
   }
 
@@ -168,6 +259,177 @@ function installGsapRecorderInMainWorld(): void {
   }
 }
 
+/**
+ * Hooks webpack's module system to record module factory source code.
+ * Captures __webpack_modules__ and intercepts webpackChunk[].push for late-loaded chunks.
+ * Injected into MAIN world at document_start alongside the GSAP recorder.
+ */
+function installModuleRecorderInMainWorld(): void {
+  const w = window as any;
+
+  if (w.__cc_module_recorder_installed) return;
+  w.__cc_module_recorder_installed = true;
+
+  const MAX_MODULES = 300;
+  const MAX_SOURCE_LEN = 3000;
+  const moduleMap: Record<string, string> = {};
+  w.__cc_webpack_modules = moduleMap;
+
+  function captureModules(modules: any): void {
+    if (!modules || typeof modules !== 'object') return;
+    const keys = Object.keys(modules);
+    let captured = Object.keys(moduleMap).length;
+    for (const id of keys) {
+      if (captured >= MAX_MODULES) break;
+      if (moduleMap[id]) continue;
+      const factory = modules[id];
+      if (typeof factory === 'function') {
+        try {
+          const src = factory.toString();
+          moduleMap[id] = src.length > MAX_SOURCE_LEN ? src.slice(0, MAX_SOURCE_LEN) + '...' : src;
+          captured++;
+        } catch { /* */ }
+      }
+    }
+  }
+
+  // Capture already-loaded modules
+  if (w.__webpack_modules__) {
+    captureModules(w.__webpack_modules__);
+  }
+
+  // Hook webpackChunk push to intercept new chunks
+  function hookChunkArray(arr: any): void {
+    if (!arr || arr.__cc_hooked) return;
+    arr.__cc_hooked = true;
+    const origPush = arr.push;
+    arr.push = function(...args: any[]) {
+      for (const chunk of args) {
+        if (Array.isArray(chunk) && chunk.length >= 2) {
+          captureModules(chunk[1]);
+        }
+      }
+      return origPush.apply(arr, args);
+    };
+    // Capture existing entries
+    for (const chunk of arr) {
+      if (Array.isArray(chunk) && chunk.length >= 2) {
+        captureModules(chunk[1]);
+      }
+    }
+  }
+
+  // Find webpackChunk arrays on window (e.g. webpackChunk_N_E, webpackChunknext, etc.)
+  function findAndHookChunks(): void {
+    for (const key of Object.keys(w)) {
+      if (key.startsWith('webpackChunk') && Array.isArray(w[key])) {
+        hookChunkArray(w[key]);
+      }
+    }
+  }
+
+  findAndHookChunks();
+
+  // Set property trap for __webpack_modules__ if not yet available
+  if (!w.__webpack_modules__) {
+    let _wm = w.__webpack_modules__;
+    try {
+      Object.defineProperty(w, '__webpack_modules__', {
+        get() { return _wm; },
+        set(val) {
+          _wm = val;
+          if (val) {
+            try { captureModules(val); } catch { /* */ }
+          }
+        },
+        configurable: true,
+        enumerable: true,
+      });
+    } catch { /* */ }
+  }
+
+  // Poll for late-initializing webpack chunk arrays
+  let pollCount = 0;
+  const pollInterval = setInterval(() => {
+    findAndHookChunks();
+    if (w.__webpack_modules__) captureModules(w.__webpack_modules__);
+    pollCount++;
+    if (pollCount > 40) clearInterval(pollInterval); // stop after ~2s
+  }, 50);
+  setTimeout(() => clearInterval(pollInterval), 5000);
+}
+
+/**
+ * Resolves webpack module dependencies for collected React components.
+ * Reads component source from __cc_last_fiber_data and matches __webpack_require__ calls
+ * against recorded module factories.
+ */
+function resolveComponentModulesInMainWorld(): {
+  displayName: string;
+  dependencies: { id: string; source: string; importedAs?: string }[];
+}[] | null {
+  const w = window as any;
+  const fiberData = w.__cc_last_fiber_data;
+  const moduleMap = w.__cc_webpack_modules;
+
+  if (!fiberData?.components || !moduleMap || typeof moduleMap !== 'object') return null;
+
+  const MAX_DEPS_PER_COMPONENT = 10;
+  const MAX_DEP_SOURCE = 2000;
+  const results: { displayName: string; dependencies: { id: string; source: string; importedAs?: string }[] }[] = [];
+
+  for (const comp of fiberData.components) {
+    if (!comp.sourceCode || comp.sourceCode === '/* source unavailable */' || comp.sourceCode === '/* minified */') continue;
+
+    const deps: { id: string; source: string; importedAs?: string }[] = [];
+    const seen = new Set<string>();
+
+    // Match patterns like __webpack_require__(123), __webpack_require__("abc"), n(123), n.n(123)
+    const patterns = [
+      /__webpack_require__\(["']?(\w+)["']?\)/g,
+      /(?:^|[^a-zA-Z_$])(\w{1,2})\.(\w{1,2})\(/g, // e.g. tn.Z(...) — short identifier calls
+    ];
+
+    // Direct webpack require matches
+    const reqPattern = /__webpack_require__\(["']?(\w+)["']?\)/g;
+    let match: RegExpExecArray | null;
+    while ((match = reqPattern.exec(comp.sourceCode)) !== null && deps.length < MAX_DEPS_PER_COMPONENT) {
+      const id = match[1];
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (moduleMap[id]) {
+        const src = moduleMap[id];
+        deps.push({
+          id,
+          source: src.length > MAX_DEP_SOURCE ? src.slice(0, MAX_DEP_SOURCE) + '...' : src,
+        });
+      }
+    }
+
+    // Also match short require alias patterns: n(123), r(456)
+    const shortReqPattern = /\b([a-z_$])\(["']?(\d+)["']?\)/g;
+    while ((match = shortReqPattern.exec(comp.sourceCode)) !== null && deps.length < MAX_DEPS_PER_COMPONENT) {
+      const id = match[2];
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (moduleMap[id]) {
+        const src = moduleMap[id];
+        deps.push({
+          id,
+          source: src.length > MAX_DEP_SOURCE ? src.slice(0, MAX_DEP_SOURCE) + '...' : src,
+          importedAs: match[1],
+        });
+      }
+    }
+
+    if (deps.length > 0) {
+      results.push({ displayName: comp.displayName, dependencies: deps });
+    }
+  }
+
+  return results.length > 0 ? results : null;
+}
+
 // Inject the GSAP recorder into every page at navigation commit (before page scripts run)
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
@@ -180,6 +442,13 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     target: { tabId: details.tabId },
     world: 'MAIN',
     func: installGsapRecorderInMainWorld,
+  }).catch(() => {
+    // Silently fail for restricted pages
+  });
+  chrome.scripting.executeScript({
+    target: { tabId: details.tabId },
+    world: 'MAIN',
+    func: installModuleRecorderInMainWorld,
   }).catch(() => {
     // Silently fail for restricted pages
   });
@@ -596,7 +865,12 @@ function collectFiberInMainWorld(): {
 
   const rootName = getComponentName(unwrapComponentType(rootFiber.type));
 
-  return { components: sorted, rootComponentName: rootName, motionComponents };
+  const result = { components: sorted, rootComponentName: rootName, motionComponents };
+
+  // Store for module resolver to access
+  (window as any).__cc_last_fiber_data = result;
+
+  return result;
 }
 
 /**
@@ -633,7 +907,13 @@ function collectGsapInMainWorld(): {
     ease?: string;
     stagger?: unknown;
     timelinePosition?: string | number;
+    parentTimelineId?: string;
   }[];
+  timelineTree?: {
+    rootId: string;
+    children: any[];
+    timelineVars?: Record<string, unknown>;
+  };
 } | null {
   // Helper to describe an element as a CSS selector
   function describeElement(el: Element | null): string {
@@ -770,6 +1050,79 @@ function collectGsapInMainWorld(): {
     result.recordedTweens = recorded.slice(0, 100);
   }
 
+  // Build timeline tree from recorded timeline hierarchy
+  const timelineRegistry = w.__cc_gsap_timelines;
+  if (timelineRegistry && typeof timelineRegistry === 'object') {
+    const tlIds = Object.keys(timelineRegistry);
+    if (tlIds.length > 0) {
+      // Find root timelines (those not referenced as children of other timelines)
+      const childTimelineIds = new Set<string>();
+      for (const id of tlIds) {
+        const tl = timelineRegistry[id];
+        if (tl?.children) {
+          for (const child of tl.children) {
+            if (child.timelineId) childTimelineIds.add(child.timelineId);
+          }
+        }
+      }
+      // Root = first timeline that isn't a child of another
+      const rootId = tlIds.find(id => !childTimelineIds.has(id)) || tlIds[0];
+      const rootTl = timelineRegistry[rootId];
+      if (rootTl) {
+        (result as any).timelineTree = {
+          rootId,
+          children: (rootTl.children || []).slice(0, 50),
+          timelineVars: rootTl.vars,
+        };
+      }
+    }
+  }
+
+  // Fallback: walk gsap.globalTimeline recursively if no recorded timelines
+  if (!(result as any).timelineTree && gsap?.globalTimeline) {
+    try {
+      function walkGlobalTimeline(tl: any, depth: number): any[] {
+        if (depth > 6) return [];
+        const children: any[] = [];
+        let child = tl._first;
+        let count = 0;
+        while (child && count < 50) {
+          if (child._first !== undefined) {
+            // It's a nested timeline
+            children.push({
+              type: 'timeline',
+              timelineId: 'global_' + depth + '_' + count,
+              duration: child._dur,
+              children: walkGlobalTimeline(child, depth + 1),
+            });
+          } else if (child.targets && typeof child.targets === 'function') {
+            // It's a tween
+            const targets = child.targets();
+            const target = targets?.[0];
+            children.push({
+              type: 'tween',
+              target: target instanceof Element ? describeElement(target) : 'object',
+              tweenType: child._from ? 'from' : (child._dur === 0 ? 'set' : 'to'),
+              duration: child._dur,
+            });
+          }
+          child = child._next;
+          count++;
+        }
+        return children;
+      }
+      const globalChildren = walkGlobalTimeline(gsap.globalTimeline, 0);
+      if (globalChildren.length > 0) {
+        (result as any).timelineTree = {
+          rootId: 'globalTimeline',
+          children: globalChildren,
+        };
+      }
+    } catch {
+      // Global timeline walk failed
+    }
+  }
+
   // If we found no API data but detected signals, still report detection
   if (result.scrollTriggers.length === 0 && result.tweens.length === 0 && !result.recordedTweens?.length) {
     if (gsapStyleSignals > 0) {
@@ -875,6 +1228,24 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
         target: { tabId },
         world: 'MAIN',
         func: collectGsapInMainWorld,
+      }).then((results) => {
+        sendResponse({ data: results?.[0]?.result ?? null });
+      }).catch(() => {
+        sendResponse({ data: null });
+      });
+      return true;
+    }
+
+    case MSG.COLLECT_MODULES: {
+      const tabId = sender.tab?.id;
+      if (!tabId) {
+        sendResponse({ data: null });
+        return true;
+      }
+      chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: resolveComponentModulesInMainWorld,
       }).then((results) => {
         sendResponse({ data: results?.[0]?.result ?? null });
       }).catch(() => {

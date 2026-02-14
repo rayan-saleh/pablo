@@ -1,8 +1,9 @@
-import type { InspectorMode, TechStack, ClipboardPayload, StrategyKey, ComponentData, ComponentTree, AnimationData, FramerMotionData, GsapData, SemanticHint, InteractionPattern } from '../shared/types';
+import type { InspectorMode, TechStack, ClipboardPayload, StrategyKey, ComponentData, ComponentTree, AnimationData, FramerMotionData, GsapData, SemanticHint, InteractionPattern, ModuleDependency } from '../shared/types';
 import { REACT_BASED_STACKS } from '../shared/types';
 import { detectStack, probeReactViaServiceWorker } from './detector';
 import { extractElement, getStrategy } from './extractor';
 import { extractAnimations, mergeAnimationData } from './animation-extractor';
+import { recordMutations } from './mutation-recorder';
 import { MSG } from '../shared/messages';
 
 let active = false;
@@ -167,6 +168,51 @@ function buildComponentTree(components: ComponentData[], rootName: string): Comp
   }
 
   return build(rootName);
+}
+
+/**
+ * Request webpack module dependency resolution from the service worker.
+ * Must be called after fiber collection (needs __cc_last_fiber_data in main world).
+ */
+function collectModulesViaServiceWorker(): Promise<{
+  displayName: string;
+  dependencies: ModuleDependency[];
+}[] | null> {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: MSG.COLLECT_MODULES }, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve(null);
+        return;
+      }
+      resolve(response?.data ?? null);
+    });
+  });
+}
+
+/**
+ * Merge resolved module dependencies into a component tree.
+ * Walks the tree and attaches deps to nodes matching by displayName.
+ */
+function mergeDependenciesIntoTree(
+  tree: ComponentTree,
+  moduleDeps: { displayName: string; dependencies: ModuleDependency[] }[],
+): void {
+  const depMap = new Map<string, ModuleDependency[]>();
+  for (const entry of moduleDeps) {
+    depMap.set(entry.displayName, entry.dependencies);
+  }
+
+  function walk(node: ComponentTree): void {
+    const deps = depMap.get(node.name);
+    if (deps) {
+      node.dependencies = deps;
+    }
+    for (const child of node.children) {
+      walk(child);
+    }
+  }
+
+  walk(tree);
 }
 
 // --- Semantic Analysis ---
@@ -403,6 +449,9 @@ async function onClick(e: MouseEvent): Promise<void> {
 
 async function handleExtraction(target: Element): Promise<void> {
   try {
+    // Start mutation recording immediately (runs for 3s in background)
+    const mutationPromise = recordMutations(target, 3000);
+
     // Always extract HTML (styled)
     const html = extractElement(target, detectedStack);
 
@@ -422,6 +471,9 @@ async function handleExtraction(target: Element): Promise<void> {
     if (gsapData) {
       console.log('[CC] GSAP data found:', gsapData.version || 'detected',
         'scrollTriggers:', gsapData.scrollTriggers.length, 'tweens:', gsapData.tweens.length);
+      if (gsapData.timelineTree) {
+        console.log('[CC] GSAP timeline tree captured, children:', gsapData.timelineTree.children.length);
+      }
       animations = mergeAnimationData(animations, { gsap: gsapData });
     }
 
@@ -441,6 +493,13 @@ async function handleExtraction(target: Element): Promise<void> {
             framerMotion: fiberData.motionComponents,
           });
         }
+
+        // Resolve webpack module dependencies for component source code
+        const moduleDeps = await collectModulesViaServiceWorker();
+        if (moduleDeps && tree) {
+          console.log('[CC] Module dependencies resolved for', moduleDeps.length, 'component(s)');
+          mergeDependenciesIntoTree(tree, moduleDeps);
+        }
       } else {
         console.log('[CC] Fiber collection returned null, using HTML only');
       }
@@ -454,6 +513,13 @@ async function handleExtraction(target: Element): Promise<void> {
 
     // Generate summary
     const summary = generateComponentSummary(target, semanticHints);
+
+    // Await mutation recording and merge into animations
+    const domRecording = await mutationPromise;
+    if (domRecording) {
+      console.log('[CC] DOM mutation recording:', domRecording.mutations.length, 'mutations');
+      animations = mergeAnimationData(animations, { domRecording });
+    }
 
     // Build clipboard payload
     const payload: ClipboardPayload = {

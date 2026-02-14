@@ -148,6 +148,27 @@ export interface GsapRecordedTweenInfo {
   ease?: string;
   stagger?: unknown;
   timelinePosition?: string | number;
+  parentTimelineId?: string;
+}
+
+export interface GsapTimelineChild {
+  type: 'tween' | 'timeline' | 'callback' | 'label';
+  target?: string;
+  tweenType?: string;
+  properties?: Record<string, unknown>;
+  callbackSource?: string;
+  labelName?: string;
+  position?: string | number;
+  duration?: number;
+  ease?: string;
+  children?: GsapTimelineChild[];
+  timelineId?: string;
+}
+
+export interface GsapTimelineTree {
+  rootId: string;
+  children: GsapTimelineChild[];
+  timelineVars?: Record<string, unknown>;
 }
 
 export interface GsapData {
@@ -156,6 +177,19 @@ export interface GsapData {
   scrollTriggers: GsapScrollTriggerInfo[];
   tweens: GsapTweenInfo[];
   recordedTweens?: GsapRecordedTweenInfo[];
+  timelineTree?: GsapTimelineTree;
+}
+
+export interface DomMutationRecord {
+  timestamp: number;
+  type: 'style' | 'class' | 'attribute' | 'childList';
+  target: string;
+  changes: Record<string, string>;
+}
+
+export interface DomMutationRecording {
+  duration: number;
+  mutations: DomMutationRecord[];
 }
 
 export interface AnimationData {
@@ -168,6 +202,7 @@ export interface AnimationData {
   framerMotion: FramerMotionData[];
   webflowIX2: WebflowIX2Data[];
   gsap?: GsapData;
+  domRecording?: DomMutationRecording;
   summary: string;
 }
 
@@ -177,11 +212,18 @@ export interface FiberInstanceData {
   props: Record<string, unknown>;
 }
 
+export interface ModuleDependency {
+  id: string;
+  source: string;
+  importedAs?: string;
+}
+
 export interface ComponentData {
   displayName: string;
   sourceCode: string;
   instances: FiberInstanceData[];
   children: string[];
+  dependencies?: ModuleDependency[];
 }
 
 export interface ComponentTree {
@@ -189,6 +231,7 @@ export interface ComponentTree {
   sourceCode: string;
   instances: FiberInstanceData[];
   children: ComponentTree[];
+  dependencies?: ModuleDependency[];
 }
 
 // --- Semantic & Interaction Types ---
