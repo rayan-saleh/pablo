@@ -32,7 +32,7 @@ export const REACT_BASED_STACKS = new Set<TechStack>(['react', 'nextjs', 'gatsby
 
 export type InspectorMode = 'component' | 'page';
 
-export type InspectorStatus = 'ready' | 'inspecting' | 'copied' | 'error' | 'reconstructing';
+export type InspectorStatus = 'ready' | 'inspecting' | 'copied' | 'error';
 
 export interface ExtractionMeta {
   tag: string;
@@ -45,53 +45,42 @@ export interface Strategy {
   cleanup(clone: Element): void;
 }
 
-// --- LLM Reconstruction Types ---
-
-export type LLMProvider = 'anthropic' | 'openai';
-
-export type OutputFormat = 'jsx' | 'tsx';
-
-export interface ExtensionSettings {
-  provider: LLMProvider;
-  apiKey: string;
-  openaiApiKey: string;
-  format: OutputFormat;
-  maxRetries: number;
-}
-
-export interface ReconstructionProgress {
-  current: number;
-  total: number;
-  componentName: string;
-  phase: 'reconstructing' | 'verifying' | 'done' | 'error';
-}
+// --- Fiber / Component Tree Types ---
 
 export interface FiberInstanceData {
   props: Record<string, unknown>;
-  html: string;
 }
 
 export interface ComponentData {
   displayName: string;
   sourceCode: string;
   instances: FiberInstanceData[];
-  children: string[]; // display names of child component types
+  children: string[];
 }
 
-export interface ReconstructionPayload {
-  components: ComponentData[];
-  rootComponentName: string;
-}
-
-export interface ReconstructedComponent {
+export interface ComponentTree {
   name: string;
-  code: string;
-  fallback: boolean;
+  sourceCode: string;
+  instances: FiberInstanceData[];
+  children: ComponentTree[];
 }
 
-export interface ReconstructionResult {
-  success: boolean;
-  code: string;
-  components: ReconstructedComponent[];
-  error?: string;
+// --- Clipboard Payload ---
+
+export interface ClipboardPayload {
+  source: {
+    url: string;
+    title: string;
+    timestamp: string;
+  };
+  detection: {
+    framework: TechStack;
+    strategy: StrategyKey;
+  };
+  component: {
+    selector: string;
+    tag: string;
+    tree?: ComponentTree;
+    html: string;
+  };
 }
