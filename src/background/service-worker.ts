@@ -1,5 +1,190 @@
 import { MSG, type ExtensionMessage } from '../shared/messages';
 
+// --- Early GSAP recorder injection ---
+
+/**
+ * Monkey-patches GSAP's core methods to record all tween/timeline definitions
+ * as they're created. This captures animation data regardless of whether tweens
+ * have completed or been auto-removed by GSAP's globalTimeline.
+ * Injected into the page's MAIN world at document_start via webNavigation.onCommitted.
+ */
+function installGsapRecorderInMainWorld(): void {
+  const w = window as any;
+
+  // Don't install twice
+  if (w.__cc_gsap_recorder_installed) return;
+  w.__cc_gsap_recorder_installed = true;
+
+  const recorded: any[] = [];
+  w.__cc_gsap_recorded = recorded;
+  const MAX_ENTRIES = 100;
+
+  function describeTarget(target: any): string {
+    if (typeof target === 'string') return target;
+    if (target instanceof Element) {
+      const tag = target.tagName.toLowerCase();
+      if (target.id) return `${tag}#${target.id}`;
+      const cls = target.className && typeof target.className === 'string'
+        ? '.' + target.className.trim().split(/\s+/).slice(0, 2).join('.')
+        : '';
+      return `${tag}${cls}` || tag;
+    }
+    if (target instanceof NodeList || target instanceof HTMLCollection) {
+      if (target.length === 0) return 'empty';
+      return describeTarget(target[0]) + (target.length > 1 ? ` (+${target.length - 1})` : '');
+    }
+    if (Array.isArray(target)) {
+      if (target.length === 0) return 'empty';
+      return target.slice(0, 3).map((t: any) => describeTarget(t)).join(', ')
+        + (target.length > 3 ? ` (+${target.length - 3})` : '');
+    }
+    return 'object';
+  }
+
+  function sanitizeVars(vars: any): Record<string, unknown> {
+    if (!vars || typeof vars !== 'object') return {};
+    const result: Record<string, unknown> = {};
+    const skipKeys = new Set([
+      'onComplete', 'onUpdate', 'onStart', 'onReverseComplete',
+      'onRepeat', 'callbackScope', 'onCompleteScope', 'onStartScope',
+      'onCompleteParams', 'onStartParams', 'onUpdateParams',
+      'lazy', 'immediateRender', 'id', 'overwrite', 'scrollTrigger',
+    ]);
+    for (const key of Object.keys(vars)) {
+      if (skipKeys.has(key)) continue;
+      const val = vars[key];
+      if (typeof val === 'function') continue;
+      if (val instanceof Element) {
+        result[key] = describeTarget(val);
+      } else if (typeof val === 'object' && val !== null) {
+        try { result[key] = JSON.parse(JSON.stringify(val)); } catch { result[key] = String(val); }
+      } else {
+        result[key] = val;
+      }
+    }
+    return result;
+  }
+
+  function record(type: string, target: any, vars: any, fromVars?: any, position?: any) {
+    if (recorded.length >= MAX_ENTRIES) return;
+    const entry: any = {
+      type,
+      target: describeTarget(target),
+      properties: sanitizeVars(vars),
+    };
+    if (vars?.duration != null) entry.duration = vars.duration;
+    if (vars?.delay != null) entry.delay = vars.delay;
+    if (vars?.ease != null) entry.ease = vars.ease;
+    if (vars?.stagger != null) entry.stagger = vars.stagger;
+    if (position != null) entry.timelinePosition = position;
+    if (fromVars) entry.fromProperties = sanitizeVars(fromVars);
+    recorded.push(entry);
+  }
+
+  function wrapGsap(gsap: any): void {
+    if (gsap.__cc_wrapped) return;
+    gsap.__cc_wrapped = true;
+
+    // Wrap gsap static methods (gsap.to, gsap.from, gsap.fromTo, gsap.set)
+    const origTo = gsap.to;
+    const origFrom = gsap.from;
+    const origFromTo = gsap.fromTo;
+    const origSet = gsap.set;
+
+    gsap.to = function(targets: any, vars: any) {
+      record('to', targets, vars);
+      return origTo.call(gsap, targets, vars);
+    };
+    gsap.from = function(targets: any, vars: any) {
+      record('from', targets, vars);
+      return origFrom.call(gsap, targets, vars);
+    };
+    gsap.fromTo = function(targets: any, fromVars: any, toVars: any) {
+      record('fromTo', targets, toVars, fromVars);
+      return origFromTo.call(gsap, targets, fromVars, toVars);
+    };
+    gsap.set = function(targets: any, vars: any) {
+      record('set', targets, vars);
+      return origSet.call(gsap, targets, vars);
+    };
+
+    // Wrap Timeline prototype methods (tl.to, tl.from, tl.fromTo, tl.set)
+    const Timeline = gsap.core?.Timeline;
+    if (Timeline?.prototype) {
+      const proto = Timeline.prototype;
+      const tlTo = proto.to;
+      const tlFrom = proto.from;
+      const tlFromTo = proto.fromTo;
+      const tlSet = proto.set;
+
+      proto.to = function(targets: any, vars: any, position?: any) {
+        record('to', targets, vars, undefined, position);
+        return tlTo.call(this, targets, vars, position);
+      };
+      proto.from = function(targets: any, vars: any, position?: any) {
+        record('from', targets, vars, undefined, position);
+        return tlFrom.call(this, targets, vars, position);
+      };
+      proto.fromTo = function(targets: any, fromVars: any, toVars: any, position?: any) {
+        record('fromTo', targets, toVars, fromVars, position);
+        return tlFromTo.call(this, targets, fromVars, toVars, position);
+      };
+      proto.set = function(targets: any, vars: any, position?: any) {
+        record('set', targets, vars, undefined, position);
+        return tlSet.call(this, targets, vars, position);
+      };
+    }
+  }
+
+  // If GSAP is already loaded, wrap immediately
+  if (w.gsap && typeof w.gsap.to === 'function') {
+    wrapGsap(w.gsap);
+    return;
+  }
+
+  // Set up a property trap to detect when GSAP is assigned to window
+  let _gsapVal = w.gsap;
+  try {
+    Object.defineProperty(w, 'gsap', {
+      get() { return _gsapVal; },
+      set(val) {
+        _gsapVal = val;
+        if (val && typeof val.to === 'function' && !val.__cc_wrapped) {
+          try { wrapGsap(val); } catch { /* silently fail */ }
+        }
+      },
+      configurable: true,
+      enumerable: true,
+    });
+  } catch {
+    // Fallback: poll for GSAP
+    const checkInterval = setInterval(() => {
+      if (w.gsap && typeof w.gsap.to === 'function' && !w.gsap.__cc_wrapped) {
+        try { wrapGsap(w.gsap); } catch { /* */ }
+        clearInterval(checkInterval);
+      }
+    }, 50);
+    setTimeout(() => clearInterval(checkInterval), 15000);
+  }
+}
+
+// Inject the GSAP recorder into every page at navigation commit (before page scripts run)
+chrome.webNavigation.onCommitted.addListener((details) => {
+  if (details.frameId !== 0) return;
+  const url = details.url;
+  if (url.startsWith('chrome://') || url.startsWith('about:') ||
+      url.startsWith('chrome-extension://') || url.startsWith('devtools://')) {
+    return;
+  }
+  chrome.scripting.executeScript({
+    target: { tabId: details.tabId },
+    world: 'MAIN',
+    func: installGsapRecorderInMainWorld,
+  }).catch(() => {
+    // Silently fail for restricted pages
+  });
+});
+
 // --- Main-world functions (self-contained, no closures) ---
 
 /**
@@ -356,6 +541,17 @@ function collectGsapInMainWorld(): {
     delay?: number;
     ease?: string;
   }[];
+  recordedTweens?: {
+    type: string;
+    target: string;
+    properties: Record<string, unknown>;
+    fromProperties?: Record<string, unknown>;
+    duration?: number;
+    delay?: number;
+    ease?: string;
+    stagger?: unknown;
+    timelinePosition?: string | number;
+  }[];
 } | null {
   // Helper to describe an element as a CSS selector
   function describeElement(el: Element | null): string {
@@ -399,6 +595,7 @@ function collectGsapInMainWorld(): {
     version?: string;
     scrollTriggers: any[];
     tweens: any[];
+    recordedTweens?: any[];
   } = {
     detected: true,
     scrollTriggers: [],
@@ -474,8 +671,14 @@ function collectGsapInMainWorld(): {
     }
   }
 
+  // Read recorded tweens from the GSAP recorder (captures completed/auto-removed tweens)
+  const recorded = (window as any).__cc_gsap_recorded;
+  if (Array.isArray(recorded) && recorded.length > 0) {
+    result.recordedTweens = recorded.slice(0, 100);
+  }
+
   // If we found no API data but detected signals, still report detection
-  if (result.scrollTriggers.length === 0 && result.tweens.length === 0) {
+  if (result.scrollTriggers.length === 0 && result.tweens.length === 0 && !result.recordedTweens?.length) {
     if (gsapStyleSignals > 0) {
       result.scrollTriggers.push({
         triggerSelector: 'multiple-elements',

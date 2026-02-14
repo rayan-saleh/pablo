@@ -394,6 +394,9 @@ function generateSummary(data: Partial<AnimationData>): string {
     if (data.gsap.tweens.length > 0) {
       gsapParts.push(`${data.gsap.tweens.length} active tween(s)`);
     }
+    if (data.gsap.recordedTweens && data.gsap.recordedTweens.length > 0) {
+      gsapParts.push(`${data.gsap.recordedTweens.length} recorded tween(s)`);
+    }
     parts.push(gsapParts.join(', '));
   }
 

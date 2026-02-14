@@ -3,7 +3,7 @@
   "name": "Component Copier",
   "description": "Hover over any component, click, and get a self-contained HTML file on your clipboard.",
   "version": "0.2.0",
-  "permissions": ["activeTab", "scripting", "clipboardWrite"],
+  "permissions": ["activeTab", "scripting", "clipboardWrite", "webNavigation"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "src/popup/index.html",

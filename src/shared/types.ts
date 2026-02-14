@@ -137,11 +137,24 @@ export interface GsapTweenInfo {
   ease?: string;
 }
 
+export interface GsapRecordedTweenInfo {
+  type: string;
+  target: string;
+  properties: Record<string, unknown>;
+  fromProperties?: Record<string, unknown>;
+  duration?: number;
+  delay?: number;
+  ease?: string;
+  stagger?: unknown;
+  timelinePosition?: string | number;
+}
+
 export interface GsapData {
   detected: boolean;
   version?: string;
   scrollTriggers: GsapScrollTriggerInfo[];
   tweens: GsapTweenInfo[];
+  recordedTweens?: GsapRecordedTweenInfo[];
 }
 
 export interface AnimationData {
