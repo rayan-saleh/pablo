@@ -234,7 +234,7 @@ export function getStrategy(stack: TechStack): Strategy {
 
 export function extractElement(element: Element, stack: TechStack): string {
   const strategyKey = getStrategyKey(stack);
-  console.log('[CC] Extraction start:', element.tagName.toLowerCase(), 'strategy:', strategyKey);
+  console.log('[Pablo] Extraction start:', element.tagName.toLowerCase(), 'strategy:', strategyKey);
   const strategy = getStrategy(stack);
   const target = strategy.expandSelection(element);
   const clone = target.cloneNode(true) as Element;
@@ -253,7 +253,7 @@ export function extractElement(element: Element, stack: TechStack): string {
   mergeAdjacentSpans(clone);
 
   const html = formatHtml(clone.outerHTML);
-  console.log('[CC] Final HTML size:', html.length);
+  console.log('[Pablo] Final HTML size:', html.length);
 
   return html;
 }

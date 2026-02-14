@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Component Copier",
+  "name": "Pablo",
   "description": "Hover over any component, click, and get a self-contained HTML file on your clipboard.",
   "version": "0.2.0",
   "permissions": ["activeTab", "scripting", "clipboardWrite", "webNavigation"],

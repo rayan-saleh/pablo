@@ -3,7 +3,7 @@ import { MSG } from '../shared/messages';
 
 export function detectStack(): TechStack {
   const result = detectStackInner();
-  console.log('[CC] Detected tech stack:', result);
+  console.log('[Pablo] Detected tech stack:', result);
   return result;
 }
 

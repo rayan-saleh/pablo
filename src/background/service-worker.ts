@@ -12,17 +12,17 @@ function installGsapRecorderInMainWorld(): void {
   const w = window as any;
 
   // Don't install twice
-  if (w.__cc_gsap_recorder_installed) return;
-  w.__cc_gsap_recorder_installed = true;
+  if (w.__pablo_gsap_recorder_installed) return;
+  w.__pablo_gsap_recorder_installed = true;
 
   const recorded: any[] = [];
-  w.__cc_gsap_recorded = recorded;
+  w.__pablo_gsap_recorded = recorded;
   const MAX_ENTRIES = 100;
 
   // Timeline hierarchy tracking
   let timelineIdCounter = 0;
   const timelineRegistry: Record<string, { vars: any; children: any[] }> = {};
-  w.__cc_gsap_timelines = timelineRegistry;
+  w.__pablo_gsap_timelines = timelineRegistry;
 
   function describeTarget(target: any): string {
     if (typeof target === 'string') return target;
@@ -101,8 +101,8 @@ function installGsapRecorderInMainWorld(): void {
   }
 
   function wrapGsap(gsap: any): void {
-    if (gsap.__cc_wrapped) return;
-    gsap.__cc_wrapped = true;
+    if (gsap.__pablo_wrapped) return;
+    gsap.__pablo_wrapped = true;
 
     // Wrap gsap.timeline() to assign IDs and track hierarchy
     const origTimeline = gsap.timeline;
@@ -110,7 +110,7 @@ function installGsapRecorderInMainWorld(): void {
       gsap.timeline = function(vars?: any) {
         const tl = origTimeline.call(gsap, vars);
         const id = 'tl_' + (timelineIdCounter++);
-        tl.__cc_id = id;
+        tl.__pablo_id = id;
         timelineRegistry[id] = { vars: sanitizeVars(vars || {}), children: [] };
         return tl;
       };
@@ -149,19 +149,19 @@ function installGsapRecorderInMainWorld(): void {
       const tlSet = proto.set;
 
       proto.to = function(targets: any, vars: any, position?: any) {
-        record('to', targets, vars, undefined, position, this.__cc_id);
+        record('to', targets, vars, undefined, position, this.__pablo_id);
         return tlTo.call(this, targets, vars, position);
       };
       proto.from = function(targets: any, vars: any, position?: any) {
-        record('from', targets, vars, undefined, position, this.__cc_id);
+        record('from', targets, vars, undefined, position, this.__pablo_id);
         return tlFrom.call(this, targets, vars, position);
       };
       proto.fromTo = function(targets: any, fromVars: any, toVars: any, position?: any) {
-        record('fromTo', targets, toVars, fromVars, position, this.__cc_id);
+        record('fromTo', targets, toVars, fromVars, position, this.__pablo_id);
         return tlFromTo.call(this, targets, fromVars, toVars, position);
       };
       proto.set = function(targets: any, vars: any, position?: any) {
-        record('set', targets, vars, undefined, position, this.__cc_id);
+        record('set', targets, vars, undefined, position, this.__pablo_id);
         return tlSet.call(this, targets, vars, position);
       };
 
@@ -169,20 +169,20 @@ function installGsapRecorderInMainWorld(): void {
       const tlAdd = proto.add;
       if (typeof tlAdd === 'function') {
         proto.add = function(child: any, position?: any) {
-          if (this.__cc_id && timelineRegistry[this.__cc_id]) {
-            if (child && child.__cc_id) {
+          if (this.__pablo_id && timelineRegistry[this.__pablo_id]) {
+            if (child && child.__pablo_id) {
               // Nested timeline
-              timelineRegistry[this.__cc_id].children.push({
+              timelineRegistry[this.__pablo_id].children.push({
                 type: 'timeline',
-                timelineId: child.__cc_id,
+                timelineId: child.__pablo_id,
                 position: position,
-                children: timelineRegistry[child.__cc_id]?.children || [],
+                children: timelineRegistry[child.__pablo_id]?.children || [],
               });
             } else if (typeof child === 'function') {
               // Callback function
               let src = '';
               try { src = child.toString().slice(0, 500); } catch { /* */ }
-              timelineRegistry[this.__cc_id].children.push({
+              timelineRegistry[this.__pablo_id].children.push({
                 type: 'callback',
                 callbackSource: src,
                 position: position,
@@ -197,10 +197,10 @@ function installGsapRecorderInMainWorld(): void {
       const tlCall = proto.call;
       if (typeof tlCall === 'function') {
         proto.call = function(fn: any, params?: any, position?: any) {
-          if (this.__cc_id && timelineRegistry[this.__cc_id] && typeof fn === 'function') {
+          if (this.__pablo_id && timelineRegistry[this.__pablo_id] && typeof fn === 'function') {
             let src = '';
             try { src = fn.toString().slice(0, 500); } catch { /* */ }
-            timelineRegistry[this.__cc_id].children.push({
+            timelineRegistry[this.__pablo_id].children.push({
               type: 'callback',
               callbackSource: src,
               position: position,
@@ -214,8 +214,8 @@ function installGsapRecorderInMainWorld(): void {
       const tlAddLabel = proto.addLabel;
       if (typeof tlAddLabel === 'function') {
         proto.addLabel = function(label: string, position?: any) {
-          if (this.__cc_id && timelineRegistry[this.__cc_id]) {
-            timelineRegistry[this.__cc_id].children.push({
+          if (this.__pablo_id && timelineRegistry[this.__pablo_id]) {
+            timelineRegistry[this.__pablo_id].children.push({
               type: 'label',
               labelName: label,
               position: position,
@@ -240,7 +240,7 @@ function installGsapRecorderInMainWorld(): void {
       get() { return _gsapVal; },
       set(val) {
         _gsapVal = val;
-        if (val && typeof val.to === 'function' && !val.__cc_wrapped) {
+        if (val && typeof val.to === 'function' && !val.__pablo_wrapped) {
           try { wrapGsap(val); } catch { /* silently fail */ }
         }
       },
@@ -250,7 +250,7 @@ function installGsapRecorderInMainWorld(): void {
   } catch {
     // Fallback: poll for GSAP
     const checkInterval = setInterval(() => {
-      if (w.gsap && typeof w.gsap.to === 'function' && !w.gsap.__cc_wrapped) {
+      if (w.gsap && typeof w.gsap.to === 'function' && !w.gsap.__pablo_wrapped) {
         try { wrapGsap(w.gsap); } catch { /* */ }
         clearInterval(checkInterval);
       }
@@ -266,12 +266,12 @@ function installGsapRecorderInMainWorld(): void {
  */
 function installDomRecorderInMainWorld(): void {
   const w = window as any;
-  if (w.__cc_dom_recorder_installed) return;
-  w.__cc_dom_recorder_installed = true;
+  if (w.__pablo_dom_recorder_installed) return;
+  w.__pablo_dom_recorder_installed = true;
 
   const MAX_MUTATIONS = 800;
   const buffer: any[] = [];
-  w.__cc_dom_mutations = buffer;
+  w.__pablo_dom_mutations = buffer;
   let recording = false;
 
   function start() {
@@ -351,12 +351,12 @@ function installDomRecorderInMainWorld(): void {
  */
 function collectDomMutationsInMainWorld(): any {
   const w = window as any;
-  const buffer: any[] = w.__cc_dom_mutations;
+  const buffer: any[] = w.__pablo_dom_mutations;
   if (!buffer || buffer.length === 0) return null;
 
   // Find the target element
-  const scope = document.querySelector('[data-cc-target-dom]');
-  if (scope) scope.removeAttribute('data-cc-target-dom');
+  const scope = document.querySelector('[data-pablo-target-dom]');
+  if (scope) scope.removeAttribute('data-pablo-target-dom');
 
   // Build selectors and filter to subtree
   function sel(el: Element): string {
@@ -398,13 +398,13 @@ function collectDomMutationsInMainWorld(): any {
 function installModuleRecorderInMainWorld(): void {
   const w = window as any;
 
-  if (w.__cc_module_recorder_installed) return;
-  w.__cc_module_recorder_installed = true;
+  if (w.__pablo_module_recorder_installed) return;
+  w.__pablo_module_recorder_installed = true;
 
   const MAX_MODULES = 300;
   const MAX_SOURCE_LEN = 3000;
   const moduleMap: Record<string, string> = {};
-  w.__cc_webpack_modules = moduleMap;
+  w.__pablo_webpack_modules = moduleMap;
 
   function captureModules(modules: any): void {
     if (!modules || typeof modules !== 'object') return;
@@ -431,8 +431,8 @@ function installModuleRecorderInMainWorld(): void {
 
   // Hook webpackChunk push to intercept new chunks
   function hookChunkArray(arr: any): void {
-    if (!arr || arr.__cc_hooked) return;
-    arr.__cc_hooked = true;
+    if (!arr || arr.__pablo_hooked) return;
+    arr.__pablo_hooked = true;
     const origPush = arr.push;
     arr.push = function(...args: any[]) {
       for (const chunk of args) {
@@ -492,7 +492,7 @@ function installModuleRecorderInMainWorld(): void {
 
 /**
  * Resolves webpack module dependencies for collected React components.
- * Reads component source from __cc_last_fiber_data and matches __webpack_require__ calls
+ * Reads component source from __pablo_last_fiber_data and matches __webpack_require__ calls
  * against recorded module factories.
  */
 function resolveComponentModulesInMainWorld(): {
@@ -500,8 +500,8 @@ function resolveComponentModulesInMainWorld(): {
   dependencies: { id: string; source: string; importedAs?: string }[];
 }[] | null {
   const w = window as any;
-  const fiberData = w.__cc_last_fiber_data;
-  const moduleMap = w.__cc_webpack_modules;
+  const fiberData = w.__pablo_last_fiber_data;
+  const moduleMap = w.__pablo_webpack_modules;
 
   if (!fiberData?.components || !moduleMap || typeof moduleMap !== 'object') return null;
 
@@ -631,7 +631,7 @@ function probeReactInMainWorld(): boolean {
 }
 
 /**
- * Collects React fiber data from the element marked with [data-cc-target].
+ * Collects React fiber data from the element marked with [data-pablo-target].
  * Runs in the page's main world via chrome.scripting.executeScript.
  * Returns serialized component tree data or null.
  */
@@ -659,11 +659,11 @@ function collectFiberInMainWorld(): {
 } | null {
   const MAX_COMPONENT_TYPES = 50;
 
-  const target = document.querySelector('[data-cc-target]');
+  const target = document.querySelector('[data-pablo-target]');
   if (!target) return null;
 
   // Remove marker immediately so it doesn't leak into collected HTML
-  target.removeAttribute('data-cc-target');
+  target.removeAttribute('data-pablo-target');
 
   // --- Helpers (all inlined for main world isolation) ---
 
@@ -924,7 +924,7 @@ function collectFiberInMainWorld(): {
           motionInstanceCount.set(displayName, count + 1);
           const motionName = count > 0 ? `${displayName}_${count + 1}` : displayName;
           motionComponents.push(extractMotionProps(motionName, fiberProps));
-          console.log('[CC] Motion props found on component fiber:', displayName, 'tag:', fiber.tag, 'keys:', MOTION_PROP_KEYS.filter(k => k in fiberProps));
+          console.log('[Pablo] Motion props found on component fiber:', displayName, 'tag:', fiber.tag, 'keys:', MOTION_PROP_KEYS.filter(k => k in fiberProps));
         }
       }
 
@@ -942,7 +942,7 @@ function collectFiberInMainWorld(): {
           motionInstanceCount.set(motionName, count + 1);
           const instanceName = count > 0 ? `${motionName}_${count + 1}` : motionName;
           motionComponents.push(extractMotionProps(instanceName, hostProps));
-          console.log('[CC] Motion props found on host fiber:', hostType, 'tag:', fiber.tag, 'keys:', MOTION_PROP_KEYS.filter(k => k in hostProps));
+          console.log('[Pablo] Motion props found on host fiber:', hostType, 'tag:', fiber.tag, 'keys:', MOTION_PROP_KEYS.filter(k => k in hostProps));
         }
       }
     }
@@ -1006,7 +1006,7 @@ function collectFiberInMainWorld(): {
   const result = { components: sorted, rootComponentName: rootName, motionComponents };
 
   // Store for module resolver to access
-  (window as any).__cc_last_fiber_data = result;
+  (window as any).__pablo_last_fiber_data = result;
 
   return result;
 }
@@ -1065,8 +1065,8 @@ function collectGsapInMainWorld(): {
   }
 
   // Find the scoping target element (set by overlay.ts)
-  const scopeTarget = document.querySelector('[data-cc-target-gsap]');
-  if (scopeTarget) scopeTarget.removeAttribute('data-cc-target-gsap');
+  const scopeTarget = document.querySelector('[data-pablo-target-gsap]');
+  if (scopeTarget) scopeTarget.removeAttribute('data-pablo-target-gsap');
   // If we have a scope target, only look within its subtree
   const scopeRoot: Element | Document = scopeTarget || document;
 
@@ -1183,13 +1183,13 @@ function collectGsapInMainWorld(): {
   }
 
   // Read recorded tweens from the GSAP recorder (captures completed/auto-removed tweens)
-  const recorded = (window as any).__cc_gsap_recorded;
+  const recorded = (window as any).__pablo_gsap_recorded;
   if (Array.isArray(recorded) && recorded.length > 0) {
     result.recordedTweens = recorded.slice(0, 100);
   }
 
   // Build timeline tree from recorded timeline hierarchy
-  const timelineRegistry = w.__cc_gsap_timelines;
+  const timelineRegistry = w.__pablo_gsap_timelines;
   if (timelineRegistry && typeof timelineRegistry === 'object') {
     const tlIds = Object.keys(timelineRegistry);
     if (tlIds.length > 0) {
@@ -1283,7 +1283,7 @@ function collectGsapInMainWorld(): {
 // --- Message routing ---
 
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
-  console.log('[CC] Service worker received message:', message.type);
+  console.log('[Pablo] Service worker received message:', message.type);
 
   switch (message.type) {
     case MSG.STATUS_UPDATE:

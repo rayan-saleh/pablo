@@ -1,4 +1,4 @@
-# Component Copier
+# Pablo
 
 A Chrome extension that lets you visually select and copy UI components from any website.
 

@@ -20,7 +20,7 @@ function createOverlay(): void {
   if (hostEl) return;
 
   hostEl = document.createElement('div');
-  hostEl.id = '__cc-overlay-host';
+  hostEl.id = '__pablo-overlay-host';
   const shadow = hostEl.attachShadow({ mode: 'closed' });
 
   overlayEl = document.createElement('div');
@@ -107,7 +107,7 @@ function buildSelector(el: Element): string {
 
 /**
  * Request fiber collection from the service worker (runs in main world).
- * Marks the target element with data-cc-target, sends COLLECT_FIBER, removes attribute.
+ * Marks the target element with data-pablo-target, sends COLLECT_FIBER, removes attribute.
  */
 function collectFiberViaServiceWorker(target: Element): Promise<{
   components: ComponentData[];
@@ -115,9 +115,9 @@ function collectFiberViaServiceWorker(target: Element): Promise<{
   motionComponents?: FramerMotionData[];
 } | null> {
   return new Promise((resolve) => {
-    target.setAttribute('data-cc-target', '1');
+    target.setAttribute('data-pablo-target', '1');
     chrome.runtime.sendMessage({ type: MSG.COLLECT_FIBER }, (response) => {
-      target.removeAttribute('data-cc-target');
+      target.removeAttribute('data-pablo-target');
       if (chrome.runtime.lastError) {
         resolve(null);
         return;
@@ -133,9 +133,9 @@ function collectFiberViaServiceWorker(target: Element): Promise<{
  */
 function collectGsapViaServiceWorker(target: Element): Promise<GsapData | null> {
   return new Promise((resolve) => {
-    target.setAttribute('data-cc-target-gsap', '1');
+    target.setAttribute('data-pablo-target-gsap', '1');
     chrome.runtime.sendMessage({ type: MSG.COLLECT_GSAP }, (response) => {
-      target.removeAttribute('data-cc-target-gsap');
+      target.removeAttribute('data-pablo-target-gsap');
       if (chrome.runtime.lastError) {
         resolve(null);
         return;
@@ -151,9 +151,9 @@ function collectGsapViaServiceWorker(target: Element): Promise<GsapData | null> 
  */
 function collectDomMutationsViaServiceWorker(target: Element): Promise<any[] | null> {
   return new Promise((resolve) => {
-    target.setAttribute('data-cc-target-dom', '1');
+    target.setAttribute('data-pablo-target-dom', '1');
     chrome.runtime.sendMessage({ type: MSG.COLLECT_DOM_MUTATIONS }, (response) => {
-      target.removeAttribute('data-cc-target-dom');
+      target.removeAttribute('data-pablo-target-dom');
       if (chrome.runtime.lastError) {
         resolve(null);
         return;
@@ -190,7 +190,7 @@ function buildComponentTree(components: ComponentData[], rootName: string): Comp
 
 /**
  * Request webpack module dependency resolution from the service worker.
- * Must be called after fiber collection (needs __cc_last_fiber_data in main world).
+ * Must be called after fiber collection (needs __pablo_last_fiber_data in main world).
  */
 function collectModulesViaServiceWorker(): Promise<{
   displayName: string;
@@ -460,7 +460,7 @@ async function onClick(e: MouseEvent): Promise<void> {
   const cls = currentTarget.className && typeof currentTarget.className === 'string'
     ? currentTarget.className.trim().split(/\s+/)[0]
     : '';
-  console.log('[CC] Click target:', tag + (cls ? '.' + cls : ''));
+  console.log('[Pablo] Click target:', tag + (cls ? '.' + cls : ''));
 
   await handleExtraction(currentTarget);
 }
@@ -475,7 +475,7 @@ async function handleExtraction(target: Element): Promise<void> {
 
     // Extract animations (universal CSS layer)
     let animations: AnimationData | undefined = extractAnimations(target);
-    console.log('[CC] Animation extraction:', animations ? 'data found' : 'none');
+    console.log('[Pablo] Animation extraction:', animations ? 'data found' : 'none');
 
     // Run strategy-specific animation extraction
     const strategy = getStrategy(detectedStack);
@@ -487,10 +487,10 @@ async function handleExtraction(target: Element): Promise<void> {
     // Collect GSAP data from main world (works for all stacks)
     const gsapData = await collectGsapViaServiceWorker(target);
     if (gsapData) {
-      console.log('[CC] GSAP data found:', gsapData.version || 'detected',
+      console.log('[Pablo] GSAP data found:', gsapData.version || 'detected',
         'scrollTriggers:', gsapData.scrollTriggers.length, 'tweens:', gsapData.tweens.length);
       if (gsapData.timelineTree) {
-        console.log('[CC] GSAP timeline tree captured, children:', gsapData.timelineTree.children.length);
+        console.log('[Pablo] GSAP timeline tree captured, children:', gsapData.timelineTree.children.length);
       }
       animations = mergeAnimationData(animations, { gsap: gsapData });
     }
@@ -498,7 +498,7 @@ async function handleExtraction(target: Element): Promise<void> {
     // Collect page-load DOM mutations from main world
     const pageLoadMutations = await collectDomMutationsViaServiceWorker(target);
     if (pageLoadMutations && pageLoadMutations.length > 0) {
-      console.log('[CC] Page-load mutations:', pageLoadMutations.length);
+      console.log('[Pablo] Page-load mutations:', pageLoadMutations.length);
       const plRecording: DomMutationRecording = {
         duration: pageLoadMutations[pageLoadMutations.length - 1].ts - pageLoadMutations[0].ts,
         mutations: pageLoadMutations.map((m: any) => {
@@ -524,15 +524,15 @@ async function handleExtraction(target: Element): Promise<void> {
     // Attempt fiber collection for React-based sites
     let tree: ComponentTree | undefined;
     if (REACT_BASED_STACKS.has(detectedStack) || detectedStack === 'framer') {
-      console.log('[CC] Attempting fiber collection via service worker');
+      console.log('[Pablo] Attempting fiber collection via service worker');
       const fiberData = await collectFiberViaServiceWorker(target);
       if (fiberData) {
-        console.log('[CC] Fiber data received, components:', fiberData.components.length);
+        console.log('[Pablo] Fiber data received, components:', fiberData.components.length);
         tree = buildComponentTree(fiberData.components, fiberData.rootComponentName);
 
         // Merge Framer Motion data from fiber collection
         if (fiberData.motionComponents && fiberData.motionComponents.length > 0) {
-          console.log('[CC] Framer Motion data found:', fiberData.motionComponents.length, 'components');
+          console.log('[Pablo] Framer Motion data found:', fiberData.motionComponents.length, 'components');
           animations = mergeAnimationData(animations, {
             framerMotion: fiberData.motionComponents,
           });
@@ -541,11 +541,11 @@ async function handleExtraction(target: Element): Promise<void> {
         // Resolve webpack module dependencies for component source code
         const moduleDeps = await collectModulesViaServiceWorker();
         if (moduleDeps && tree) {
-          console.log('[CC] Module dependencies resolved for', moduleDeps.length, 'component(s)');
+          console.log('[Pablo] Module dependencies resolved for', moduleDeps.length, 'component(s)');
           mergeDependenciesIntoTree(tree, moduleDeps);
         }
       } else {
-        console.log('[CC] Fiber collection returned null, using HTML only');
+        console.log('[Pablo] Fiber collection returned null, using HTML only');
       }
     }
 
@@ -561,7 +561,7 @@ async function handleExtraction(target: Element): Promise<void> {
     // Await mutation recording and merge into animations
     const domRecording = await mutationPromise;
     if (domRecording) {
-      console.log('[CC] DOM mutation recording:', domRecording.mutations.length, 'mutations');
+      console.log('[Pablo] DOM mutation recording:', domRecording.mutations.length, 'mutations');
       animations = mergeAnimationData(animations, { domRecording });
     }
 
@@ -591,7 +591,7 @@ async function handleExtraction(target: Element): Promise<void> {
 
     const payloadStr = JSON.stringify(payload, null, 2);
     await navigator.clipboard.writeText(payloadStr);
-    console.log('[CC] Clipboard copy success, size:', payloadStr.length);
+    console.log('[Pablo] Clipboard copy success, size:', payloadStr.length);
 
     chrome.runtime.sendMessage({
       type: MSG.EXTRACTION_COMPLETE,
@@ -604,7 +604,7 @@ async function handleExtraction(target: Element): Promise<void> {
 
     flashGreen();
   } catch (err) {
-    console.error('[Component Copier] Extraction failed:', err);
+    console.error('[Pablo] Extraction failed:', err);
     chrome.runtime.sendMessage({
       type: MSG.STATUS_UPDATE,
       status: 'error',
@@ -670,7 +670,7 @@ function onKeyDown(e: KeyboardEvent): void {
 // --- Public API ---
 
 export async function activate(newMode: InspectorMode): Promise<void> {
-  console.log('[CC] Overlay activate, mode:', newMode);
+  console.log('[Pablo] Overlay activate, mode:', newMode);
   if (active) deactivate();
 
   mode = newMode;
@@ -692,7 +692,7 @@ export async function activate(newMode: InspectorMode): Promise<void> {
   if (detectedStack === 'generic') {
     const isReact = await probeReactViaServiceWorker();
     if (isReact) {
-      console.log('[CC] Async React probe confirmed React — upgrading stack');
+      console.log('[Pablo] Async React probe confirmed React — upgrading stack');
       detectedStack = 'react';
     }
   }
@@ -705,7 +705,7 @@ export async function activate(newMode: InspectorMode): Promise<void> {
 }
 
 export function deactivate(): void {
-  console.log('[CC] Overlay deactivate');
+  console.log('[Pablo] Overlay deactivate');
   active = false;
   currentTarget = null;
 

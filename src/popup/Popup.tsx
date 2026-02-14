@@ -20,7 +20,7 @@ export function Popup() {
     });
 
     const listener = (message: ExtensionMessage) => {
-      console.log('[CC] Popup received message:', message.type);
+      console.log('[Pablo] Popup received message:', message.type);
       if (message.type === MSG.STATUS_UPDATE) {
         setStatus(message.status);
         if (message.stack) setStack(message.stack as TechStack);
@@ -43,14 +43,14 @@ export function Popup() {
   }
 
   function handleStart() {
-    console.log('[CC] User action: start, mode:', mode);
+    console.log('[Pablo] User action: start, mode:', mode);
     sendToActiveTab({ type: MSG.ACTIVATE_INSPECTOR, mode });
     setStatus('inspecting');
     window.close();
   }
 
   function handleStop() {
-    console.log('[CC] User action: stop');
+    console.log('[Pablo] User action: stop');
     sendToActiveTab({ type: MSG.DEACTIVATE_INSPECTOR });
     setStatus('ready');
   }
@@ -69,7 +69,7 @@ export function Popup() {
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-base font-semibold text-gray-900">Component Copier</h1>
+        <h1 className="text-base font-semibold text-gray-900">Pablo</h1>
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor}`}>
           {statusText}
         </span>
