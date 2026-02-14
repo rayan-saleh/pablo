@@ -182,7 +182,7 @@ export interface GsapData {
 
 export interface DomMutationRecord {
   timestamp: number;
-  type: 'style' | 'class' | 'attribute' | 'childList';
+  type: 'style' | 'class' | 'attribute' | 'childList' | 'text';
   target: string;
   changes: Record<string, string>;
 }
@@ -203,6 +203,7 @@ export interface AnimationData {
   webflowIX2: WebflowIX2Data[];
   gsap?: GsapData;
   domRecording?: DomMutationRecording;
+  pageLoadRecording?: DomMutationRecording;
   summary: string;
 }
 

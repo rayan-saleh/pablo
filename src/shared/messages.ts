@@ -10,6 +10,7 @@ export const MSG = {
   COLLECT_FIBER: 'COLLECT_FIBER',
   COLLECT_GSAP: 'COLLECT_GSAP',
   COLLECT_MODULES: 'COLLECT_MODULES',
+  COLLECT_DOM_MUTATIONS: 'COLLECT_DOM_MUTATIONS',
 } as const;
 
 export type ActivateInspectorMsg = {
@@ -52,6 +53,10 @@ export type CollectModulesMsg = {
   type: typeof MSG.COLLECT_MODULES;
 };
 
+export type CollectDomMutationsMsg = {
+  type: typeof MSG.COLLECT_DOM_MUTATIONS;
+};
+
 export type ExtensionMessage =
   | ActivateInspectorMsg
   | DeactivateInspectorMsg
@@ -61,4 +66,5 @@ export type ExtensionMessage =
   | ProbeReactMsg
   | CollectFiberMsg
   | CollectGsapMsg
-  | CollectModulesMsg;
+  | CollectModulesMsg
+  | CollectDomMutationsMsg;

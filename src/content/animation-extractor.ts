@@ -408,6 +408,16 @@ function generateSummary(data: Partial<AnimationData>): string {
     parts.push(`DOM mutation recording: ${data.domRecording.mutations.length} mutation(s) over ${data.domRecording.duration}ms`);
   }
 
+  if (data.pageLoadRecording) {
+    const mutations = data.pageLoadRecording.mutations;
+    const textChanges = mutations.filter(m => m.type === 'text' || m.type === 'childList');
+    const styleChanges = mutations.filter(m => m.type === 'style');
+    const parts2: string[] = [];
+    if (textChanges.length > 0) parts2.push(`${textChanges.length} text change(s)`);
+    if (styleChanges.length > 0) parts2.push(`${styleChanges.length} style change(s)`);
+    parts.push(`Page-load animation recording: ${parts2.join(', ')} over ${data.pageLoadRecording.duration}ms`);
+  }
+
   return parts.join('. ') + (parts.length > 0 ? '.' : '');
 }
 
@@ -518,6 +528,9 @@ export function mergeAnimationData(
   if (partial.domRecording) {
     merged.domRecording = partial.domRecording;
   }
+  if (partial.pageLoadRecording) {
+    merged.pageLoadRecording = partial.pageLoadRecording;
+  }
 
   // Check if there's any data at all
   const hasData =
@@ -530,7 +543,8 @@ export function mergeAnimationData(
     merged.framerMotion.length > 0 ||
     merged.webflowIX2.length > 0 ||
     merged.gsap?.detected ||
-    merged.domRecording;
+    merged.domRecording ||
+    merged.pageLoadRecording;
 
   if (!hasData) return undefined;
 

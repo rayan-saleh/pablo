@@ -1,4 +1,4 @@
-import type { InspectorMode, TechStack, ClipboardPayload, StrategyKey, ComponentData, ComponentTree, AnimationData, FramerMotionData, GsapData, SemanticHint, InteractionPattern, ModuleDependency } from '../shared/types';
+import type { InspectorMode, TechStack, ClipboardPayload, StrategyKey, ComponentData, ComponentTree, AnimationData, FramerMotionData, GsapData, DomMutationRecording, SemanticHint, InteractionPattern, ModuleDependency } from '../shared/types';
 import { REACT_BASED_STACKS } from '../shared/types';
 import { detectStack, probeReactViaServiceWorker } from './detector';
 import { extractElement, getStrategy } from './extractor';
@@ -136,6 +136,24 @@ function collectGsapViaServiceWorker(target: Element): Promise<GsapData | null> 
     target.setAttribute('data-cc-target-gsap', '1');
     chrome.runtime.sendMessage({ type: MSG.COLLECT_GSAP }, (response) => {
       target.removeAttribute('data-cc-target-gsap');
+      if (chrome.runtime.lastError) {
+        resolve(null);
+        return;
+      }
+      resolve(response?.data ?? null);
+    });
+  });
+}
+
+/**
+ * Request page-load DOM mutation data from the service worker (runs in main world).
+ * Marks the target element so collection is scoped to its subtree.
+ */
+function collectDomMutationsViaServiceWorker(target: Element): Promise<any[] | null> {
+  return new Promise((resolve) => {
+    target.setAttribute('data-cc-target-dom', '1');
+    chrome.runtime.sendMessage({ type: MSG.COLLECT_DOM_MUTATIONS }, (response) => {
+      target.removeAttribute('data-cc-target-dom');
       if (chrome.runtime.lastError) {
         resolve(null);
         return;
@@ -475,6 +493,32 @@ async function handleExtraction(target: Element): Promise<void> {
         console.log('[CC] GSAP timeline tree captured, children:', gsapData.timelineTree.children.length);
       }
       animations = mergeAnimationData(animations, { gsap: gsapData });
+    }
+
+    // Collect page-load DOM mutations from main world
+    const pageLoadMutations = await collectDomMutationsViaServiceWorker(target);
+    if (pageLoadMutations && pageLoadMutations.length > 0) {
+      console.log('[CC] Page-load mutations:', pageLoadMutations.length);
+      const plRecording: DomMutationRecording = {
+        duration: pageLoadMutations[pageLoadMutations.length - 1].ts - pageLoadMutations[0].ts,
+        mutations: pageLoadMutations.map((m: any) => {
+          let changes: Record<string, string>;
+          if (m.type === 'text' || m.type === 'style') {
+            changes = { old: m.old, new: m.new };
+          } else {
+            changes = {};
+            if (m.added) changes.added = m.added.join(', ');
+            if (m.removed) changes.removed = m.removed.join(', ');
+          }
+          return {
+            timestamp: m.ts,
+            type: m.type,
+            target: m.target,
+            changes,
+          };
+        }),
+      };
+      animations = mergeAnimationData(animations, { pageLoadRecording: plRecording });
     }
 
     // Attempt fiber collection for React-based sites

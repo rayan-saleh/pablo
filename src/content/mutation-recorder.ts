@@ -39,7 +39,18 @@ export function recordMutations(
         if (!targetEl) continue;
         const selector = buildSelector(targetEl);
 
-        if (record.type === 'attributes' && record.attributeName) {
+        if (record.type === 'characterData') {
+          const newText = (record.target.textContent || '').slice(0, 200);
+          const oldText = (record.oldValue || '').slice(0, 200);
+          if (newText !== oldText) {
+            mutations.push({
+              timestamp,
+              type: 'text',
+              target: selector,
+              changes: { old: oldText, new: newText },
+            });
+          }
+        } else if (record.type === 'attributes' && record.attributeName) {
           const attrName = record.attributeName;
           if (!TRACKED_ATTRIBUTES.has(attrName)) continue;
 
@@ -111,6 +122,8 @@ export function recordMutations(
     observer.observe(target, {
       attributes: true,
       attributeOldValue: true,
+      characterData: true,
+      characterDataOldValue: true,
       childList: true,
       subtree: true,
     });

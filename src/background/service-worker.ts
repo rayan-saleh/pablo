@@ -260,6 +260,137 @@ function installGsapRecorderInMainWorld(): void {
 }
 
 /**
+ * Records DOM mutations from page load to capture JS-driven animations
+ * (typewriter effects, counters, staggered reveals, fade-in sequences, etc.).
+ * Injected into the page's MAIN world at document_start via webNavigation.onCommitted.
+ */
+function installDomRecorderInMainWorld(): void {
+  const w = window as any;
+  if (w.__cc_dom_recorder_installed) return;
+  w.__cc_dom_recorder_installed = true;
+
+  const MAX_MUTATIONS = 800;
+  const buffer: any[] = [];
+  w.__cc_dom_mutations = buffer;
+  let recording = false;
+
+  function start() {
+    if (recording) return;
+    recording = true;
+    const t0 = performance.now();
+
+    const observer = new MutationObserver((records) => {
+      for (const rec of records) {
+        if (buffer.length >= MAX_MUTATIONS) buffer.shift(); // ring buffer
+
+        const ts = Math.round(performance.now() - t0);
+        const target = rec.target instanceof Element
+          ? rec.target
+          : rec.target.parentElement;
+        if (!target) continue;
+
+        if (rec.type === 'characterData') {
+          buffer.push({
+            ts, type: 'text', target,
+            old: (rec.oldValue || '').slice(0, 200),
+            new: (rec.target.textContent || '').slice(0, 200),
+          });
+        } else if (rec.type === 'childList') {
+          const added: string[] = [];
+          const removed: string[] = [];
+          for (const n of Array.from(rec.addedNodes).slice(0, 5)) {
+            if (n.nodeType === 3) { // TEXT_NODE
+              const t = n.textContent?.trim();
+              if (t) added.push(t.slice(0, 100));
+            }
+          }
+          for (const n of Array.from(rec.removedNodes).slice(0, 5)) {
+            if (n.nodeType === 3) {
+              const t = n.textContent?.trim();
+              if (t) removed.push(t.slice(0, 100));
+            }
+          }
+          if (added.length || removed.length) {
+            buffer.push({ ts, type: 'childList', target, added, removed });
+          }
+        } else if (rec.type === 'attributes' && rec.attributeName === 'style') {
+          buffer.push({
+            ts, type: 'style', target,
+            old: (rec.oldValue || '').slice(0, 300),
+            new: (target.getAttribute('style') || '').slice(0, 300),
+          });
+        }
+      }
+    });
+
+    observer.observe(document.documentElement, {
+      characterData: true,
+      characterDataOldValue: true,
+      childList: true,
+      attributes: true,
+      attributeOldValue: true,
+      attributeFilter: ['style', 'class'],
+      subtree: true,
+    });
+
+    // Auto-stop after 30s to avoid unbounded recording
+    setTimeout(() => observer.disconnect(), 30000);
+  }
+
+  // Start after initial render to avoid recording DOM construction
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => requestAnimationFrame(start));
+  } else {
+    requestAnimationFrame(start);
+  }
+}
+
+/**
+ * Collects recorded DOM mutations from the page, optionally scoped to a target element's subtree.
+ * Runs in the page's main world via chrome.scripting.executeScript.
+ */
+function collectDomMutationsInMainWorld(): any {
+  const w = window as any;
+  const buffer: any[] = w.__cc_dom_mutations;
+  if (!buffer || buffer.length === 0) return null;
+
+  // Find the target element
+  const scope = document.querySelector('[data-cc-target-dom]');
+  if (scope) scope.removeAttribute('data-cc-target-dom');
+
+  // Build selectors and filter to subtree
+  function sel(el: Element): string {
+    const tag = el.tagName.toLowerCase();
+    if (el.id) return `${tag}#${el.id}`;
+    const cls = el.className && typeof el.className === 'string'
+      ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.')
+      : '';
+    return `${tag}${cls}` || tag;
+  }
+
+  const result: any[] = [];
+  for (const m of buffer) {
+    const el = m.target;
+    if (!(el instanceof Element)) continue;
+    if (scope && !scope.contains(el)) continue;
+
+    const entry: any = { ts: m.ts, type: m.type, target: sel(el) };
+    if (m.type === 'text') {
+      entry.old = m.old;
+      entry.new = m.new;
+    } else if (m.type === 'childList') {
+      if (m.added?.length) entry.added = m.added;
+      if (m.removed?.length) entry.removed = m.removed;
+    } else if (m.type === 'style') {
+      entry.old = m.old;
+      entry.new = m.new;
+    }
+    result.push(entry);
+  }
+  return result.length > 0 ? result : null;
+}
+
+/**
  * Hooks webpack's module system to record module factory source code.
  * Captures __webpack_modules__ and intercepts webpackChunk[].push for late-loaded chunks.
  * Injected into MAIN world at document_start alongside the GSAP recorder.
@@ -449,6 +580,13 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     target: { tabId: details.tabId },
     world: 'MAIN',
     func: installModuleRecorderInMainWorld,
+  }).catch(() => {
+    // Silently fail for restricted pages
+  });
+  chrome.scripting.executeScript({
+    target: { tabId: details.tabId },
+    world: 'MAIN',
+    func: installDomRecorderInMainWorld,
   }).catch(() => {
     // Silently fail for restricted pages
   });
@@ -1246,6 +1384,24 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
         target: { tabId },
         world: 'MAIN',
         func: resolveComponentModulesInMainWorld,
+      }).then((results) => {
+        sendResponse({ data: results?.[0]?.result ?? null });
+      }).catch(() => {
+        sendResponse({ data: null });
+      });
+      return true;
+    }
+
+    case MSG.COLLECT_DOM_MUTATIONS: {
+      const tabId = sender.tab?.id;
+      if (!tabId) {
+        sendResponse({ data: null });
+        return true;
+      }
+      chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: collectDomMutationsInMainWorld,
       }).then((results) => {
         sendResponse({ data: results?.[0]?.result ?? null });
       }).catch(() => {
