@@ -16,6 +16,8 @@ let detectedStack: TechStack = 'generic';
 let hostEl: HTMLDivElement | null = null;
 let overlayEl: HTMLDivElement | null = null;
 let labelEl: HTMLDivElement | null = null;
+let spinnerEl: HTMLDivElement | null = null;
+let extracting = false;
 
 function createOverlay(): void {
   if (hostEl) return;
@@ -49,8 +51,42 @@ function createOverlay(): void {
     display: none;
   `;
 
+  spinnerEl = document.createElement('div');
+  spinnerEl.style.cssText = `
+    position: fixed;
+    pointer-events: none;
+    z-index: 2147483647;
+    display: none;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.75);
+    color: white;
+    font: 11px/1.4 -apple-system, BlinkMacSystemFont, sans-serif;
+    padding: 6px 12px;
+    border-radius: 6px;
+    white-space: nowrap;
+  `;
+  spinnerEl.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 14 14" style="animation: __pablo-spin 0.8s linear infinite; flex-shrink: 0;">
+      <circle cx="7" cy="7" r="5.5" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+      <path d="M7 1.5 A5.5 5.5 0 0 1 12.5 7" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <span>Extracting…</span>
+  `;
+
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes __pablo-spin { to { transform: rotate(360deg); } }
+    @keyframes __pablo-pulse {
+      0%, 100% { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
+      50% { border-color: #8b5cf6; background: rgba(139, 92, 246, 0.15); }
+    }
+  `;
+
+  shadow.appendChild(style);
   shadow.appendChild(overlayEl);
   shadow.appendChild(labelEl);
+  shadow.appendChild(spinnerEl);
   document.documentElement.appendChild(hostEl);
 }
 
@@ -60,6 +96,7 @@ function destroyOverlay(): void {
     hostEl = null;
     overlayEl = null;
     labelEl = null;
+    spinnerEl = null;
   }
 }
 
@@ -86,6 +123,34 @@ function updateOverlay(el: Element): void {
 function hideOverlay(): void {
   if (overlayEl) overlayEl.style.display = 'none';
   if (labelEl) labelEl.style.display = 'none';
+  if (spinnerEl) spinnerEl.style.display = 'none';
+}
+
+function showExtracting(): void {
+  extracting = true;
+  if (overlayEl) {
+    overlayEl.style.animation = '__pablo-pulse 1s ease-in-out infinite';
+  }
+  if (labelEl) {
+    labelEl.textContent = 'Extracting…';
+    labelEl.style.background = '#8b5cf6';
+  }
+  if (spinnerEl && overlayEl) {
+    const rect = overlayEl.getBoundingClientRect();
+    spinnerEl.style.display = 'flex';
+    spinnerEl.style.left = `${rect.left + rect.width / 2 - 50}px`;
+    spinnerEl.style.top = `${rect.top + rect.height / 2 - 12}px`;
+  }
+}
+
+function hideExtracting(): void {
+  extracting = false;
+  if (overlayEl) {
+    overlayEl.style.animation = '';
+  }
+  if (spinnerEl) {
+    spinnerEl.style.display = 'none';
+  }
 }
 
 function getPageTarget(): Element {
@@ -449,7 +514,7 @@ function onMouseMove(e: MouseEvent): void {
 }
 
 async function onClick(e: MouseEvent): Promise<void> {
-  if (!active) return;
+  if (!active || extracting) return;
 
   e.preventDefault();
   e.stopPropagation();
@@ -467,6 +532,7 @@ async function onClick(e: MouseEvent): Promise<void> {
 }
 
 async function handleExtraction(target: Element): Promise<void> {
+  showExtracting();
   try {
     // Start mutation recording immediately (runs for 3s in background)
     const mutationPromise = recordMutations(target, 3000);
@@ -608,8 +674,26 @@ async function handleExtraction(target: Element): Promise<void> {
       },
     });
 
+    hideExtracting();
     flashGreen();
   } catch (err) {
+    hideExtracting();
+    if (labelEl) {
+      labelEl.textContent = 'Error';
+      labelEl.style.background = '#ef4444';
+      setTimeout(() => {
+        if (labelEl) {
+          labelEl.style.background = '#3b82f6';
+          if (currentTarget) {
+            const tag = currentTarget.tagName.toLowerCase();
+            const className = currentTarget.className && typeof currentTarget.className === 'string'
+              ? '.' + currentTarget.className.trim().split(/\s+/)[0]
+              : '';
+            labelEl.textContent = `${tag}${className} | ${detectedStack}`;
+          }
+        }
+      }, 2000);
+    }
     console.error('[Pablo] Extraction failed:', err);
     chrome.runtime.sendMessage({
       type: MSG.STATUS_UPDATE,
@@ -622,13 +706,27 @@ function flashGreen(): void {
   if (overlayEl) {
     overlayEl.style.borderColor = '#22c55e';
     overlayEl.style.background = 'rgba(34, 197, 94, 0.15)';
-    setTimeout(() => {
-      if (overlayEl) {
-        overlayEl.style.borderColor = '#3b82f6';
-        overlayEl.style.background = 'rgba(59, 130, 246, 0.1)';
-      }
-    }, 500);
   }
+  if (labelEl) {
+    labelEl.textContent = 'Copied!';
+    labelEl.style.background = '#22c55e';
+  }
+  setTimeout(() => {
+    if (overlayEl) {
+      overlayEl.style.borderColor = '#3b82f6';
+      overlayEl.style.background = 'rgba(59, 130, 246, 0.1)';
+    }
+    if (labelEl) {
+      labelEl.style.background = '#3b82f6';
+      if (currentTarget) {
+        const tag = currentTarget.tagName.toLowerCase();
+        const className = currentTarget.className && typeof currentTarget.className === 'string'
+          ? '.' + currentTarget.className.trim().split(/\s+/)[0]
+          : '';
+        labelEl.textContent = `${tag}${className} | ${detectedStack}`;
+      }
+    }
+  }, 1000);
 }
 
 function onKeyDown(e: KeyboardEvent): void {
