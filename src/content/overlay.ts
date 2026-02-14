@@ -1,6 +1,8 @@
 import type { InspectorMode, TechStack } from '../shared/types';
+import { REACT_BASED_STACKS } from '../shared/types';
 import { detectStack } from './detector';
-import { extractElement, getStrategy } from './extractor';
+import { extractElement } from './extractor';
+import { collectFiberData } from './fiber-collector';
 import { MSG } from '../shared/messages';
 
 let active = false;
@@ -84,6 +86,34 @@ function hideOverlay(): void {
   if (labelEl) labelEl.style.display = 'none';
 }
 
+function setOverlayAmber(): void {
+  if (overlayEl) {
+    overlayEl.style.borderColor = '#f59e0b';
+    overlayEl.style.background = 'rgba(245, 158, 11, 0.1)';
+    overlayEl.style.animation = 'cc-pulse 1.5s ease-in-out infinite';
+  }
+  if (labelEl) {
+    labelEl.style.background = '#f59e0b';
+  }
+}
+
+function setOverlayDefault(): void {
+  if (overlayEl) {
+    overlayEl.style.borderColor = '#3b82f6';
+    overlayEl.style.background = 'rgba(59, 130, 246, 0.1)';
+    overlayEl.style.animation = '';
+  }
+  if (labelEl) {
+    labelEl.style.background = '#3b82f6';
+  }
+}
+
+function setLabelText(text: string): void {
+  if (labelEl) {
+    labelEl.textContent = text;
+  }
+}
+
 function getPageTarget(): Element {
   return document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
 }
@@ -120,36 +150,137 @@ async function onClick(e: MouseEvent): Promise<void> {
 
   if (!currentTarget) return;
 
+  const tag = currentTarget.tagName.toLowerCase();
+  const cls = currentTarget.className && typeof currentTarget.className === 'string'
+    ? currentTarget.className.trim().split(/\s+/)[0]
+    : '';
+  console.log('[CC] Click target:', tag + (cls ? '.' + cls : ''));
+
+  // Branch: React-based sites attempt LLM reconstruction
+  if (REACT_BASED_STACKS.has(detectedStack)) {
+    console.log('[CC] Taking React extraction path');
+    await handleReactExtraction(currentTarget);
+  } else {
+    console.log('[CC] Taking HTML extraction path');
+    await handleHtmlExtraction(currentTarget);
+  }
+}
+
+async function handleHtmlExtraction(target: Element): Promise<void> {
   try {
-    const html = extractElement(currentTarget, detectedStack);
+    const html = extractElement(target, detectedStack);
     await navigator.clipboard.writeText(html);
+    console.log('[CC] Clipboard copy success, size:', html.length);
 
     chrome.runtime.sendMessage({
       type: MSG.EXTRACTION_COMPLETE,
       meta: {
-        tag: currentTarget.tagName.toLowerCase(),
+        tag: target.tagName.toLowerCase(),
         stack: detectedStack,
         size: html.length,
       },
     });
 
-    // Flash green
-    if (overlayEl) {
-      overlayEl.style.borderColor = '#22c55e';
-      overlayEl.style.background = 'rgba(34, 197, 94, 0.15)';
-      setTimeout(() => {
-        if (overlayEl) {
-          overlayEl.style.borderColor = '#3b82f6';
-          overlayEl.style.background = 'rgba(59, 130, 246, 0.1)';
-        }
-      }, 500);
-    }
+    flashGreen();
   } catch (err) {
     console.error('[Component Copier] Extraction failed:', err);
     chrome.runtime.sendMessage({
       type: MSG.STATUS_UPDATE,
       status: 'error',
     });
+  }
+}
+
+async function handleReactExtraction(target: Element): Promise<void> {
+  // Attempt to collect fiber data
+  const payload = collectFiberData(target);
+
+  if (!payload) {
+    // Fall back to HTML extraction if fiber collection fails
+    await handleHtmlExtraction(target);
+    return;
+  }
+
+  // Show reconstructing state
+  chrome.runtime.sendMessage({
+    type: MSG.STATUS_UPDATE,
+    status: 'reconstructing',
+  });
+  setOverlayAmber();
+  setLabelText('Reconstructing...');
+
+  // Disable mouse tracking while reconstructing
+  document.removeEventListener('mousemove', onMouseMove, true);
+
+  try {
+    // Open port to service worker for long-running reconstruction
+    const port = chrome.runtime.connect({ name: 'reconstruction' });
+
+    const result = await new Promise<{ success: boolean; code: string; error?: string }>((resolve) => {
+      port.onMessage.addListener((msg) => {
+        if (msg.type === MSG.RECONSTRUCTION_PROGRESS) {
+          const p = msg.progress;
+          setLabelText(`${p.componentName} (${p.current}/${p.total}) — ${p.phase}`);
+        } else if (msg.type === MSG.RECONSTRUCTION_COMPLETE) {
+          resolve({ success: true, code: msg.result.code });
+          port.disconnect();
+        } else if (msg.type === MSG.RECONSTRUCTION_ERROR) {
+          resolve({ success: false, code: '', error: msg.error });
+          port.disconnect();
+        }
+      });
+
+      port.postMessage({
+        type: MSG.RECONSTRUCTION_START,
+        payload,
+      });
+    });
+
+    console.log('[CC] Reconstruction result received, success:', result.success);
+    if (result.success && result.code) {
+      await navigator.clipboard.writeText(result.code);
+      console.log('[CC] Clipboard copy success, size:', result.code.length);
+
+      chrome.runtime.sendMessage({
+        type: MSG.EXTRACTION_COMPLETE,
+        meta: {
+          tag: target.tagName.toLowerCase(),
+          stack: detectedStack,
+          size: result.code.length,
+        },
+      });
+
+      flashGreen();
+    } else {
+      // Reconstruction failed — fall back to HTML extraction
+      console.warn('[Component Copier] Reconstruction failed:', result.error);
+      setOverlayDefault();
+      await handleHtmlExtraction(target);
+    }
+  } catch (err) {
+    console.error('[Component Copier] Reconstruction error:', err);
+    // Fall back to HTML
+    setOverlayDefault();
+    await handleHtmlExtraction(target);
+  } finally {
+    // Re-enable mouse tracking
+    setOverlayDefault();
+    if (active) {
+      document.addEventListener('mousemove', onMouseMove, true);
+    }
+  }
+}
+
+function flashGreen(): void {
+  if (overlayEl) {
+    overlayEl.style.borderColor = '#22c55e';
+    overlayEl.style.background = 'rgba(34, 197, 94, 0.15)';
+    setTimeout(() => {
+      if (overlayEl) {
+        overlayEl.style.borderColor = '#3b82f6';
+        overlayEl.style.background = 'rgba(59, 130, 246, 0.1)';
+      }
+    }, 500);
   }
 }
 
@@ -198,6 +329,7 @@ function onKeyDown(e: KeyboardEvent): void {
 // --- Public API ---
 
 export function activate(newMode: InspectorMode): void {
+  console.log('[CC] Overlay activate, mode:', newMode);
   if (active) deactivate();
 
   mode = newMode;
@@ -223,6 +355,7 @@ export function activate(newMode: InspectorMode): void {
 }
 
 export function deactivate(): void {
+  console.log('[CC] Overlay deactivate');
   active = false;
   currentTarget = null;
 

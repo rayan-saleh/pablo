@@ -1,4 +1,5 @@
-import type { TechStack, Strategy } from '../shared/types';
+import type { TechStack, StrategyKey, Strategy } from '../shared/types';
+import { REACT_BASED_STACKS } from '../shared/types';
 import { genericStrategy } from './strategies/generic';
 import { shopifyStrategy } from './strategies/shopify';
 import { wordpressStrategy } from './strategies/wordpress';
@@ -26,7 +27,7 @@ const VISUAL_PROPERTIES = [
   'transform', 'transition', 'box-sizing', 'object-fit',
 ];
 
-const strategies: Record<TechStack, Strategy> = {
+const strategies: Record<StrategyKey, Strategy> = {
   generic: genericStrategy,
   shopify: shopifyStrategy,
   wordpress: wordpressStrategy,
@@ -35,11 +36,19 @@ const strategies: Record<TechStack, Strategy> = {
   react: reactStrategy,
 };
 
+function getStrategyKey(stack: TechStack): StrategyKey {
+  if (REACT_BASED_STACKS.has(stack)) return 'react';
+  if (stack in strategies) return stack as StrategyKey;
+  return 'generic';
+}
+
 export function getStrategy(stack: TechStack): Strategy {
-  return strategies[stack];
+  return strategies[getStrategyKey(stack)];
 }
 
 export function extractElement(element: Element, stack: TechStack): string {
+  const strategyKey = getStrategyKey(stack);
+  console.log('[CC] Extraction start:', element.tagName.toLowerCase(), 'strategy:', strategyKey);
   const strategy = getStrategy(stack);
   const target = strategy.expandSelection(element);
   const clone = target.cloneNode(true) as Element;
@@ -55,6 +64,9 @@ export function extractElement(element: Element, stack: TechStack): string {
 
   // Merge consecutive identical-style spans (e.g. per-character Framer spans)
   mergeAdjacentSpans(clone);
+
+  const html = clone.outerHTML;
+  console.log('[CC] Final HTML size:', html.length);
 
   // Wrap in full HTML document
   return `<!DOCTYPE html>
@@ -85,6 +97,11 @@ function getDefaultStyles(tagName: string): Map<string, string> {
     defaults.set(prop, computed.getPropertyValue(prop));
   }
 
+  // Correct for the properties we manually set on the reference element —
+  // otherwise real defaults (position:static, visibility:visible) appear as non-default
+  defaults.set('position', 'static');
+  defaults.set('visibility', 'visible');
+
   document.body.removeChild(ref);
   defaultStyleCache.set(tagName, defaults);
   return defaults;
@@ -102,9 +119,16 @@ function applyComputedStyles(original: Element, clone: Element): void {
     const cloneEl = cloneElements[i];
     if (!origEl || !cloneEl) continue;
 
+    // Skip computed style extraction for SVG child elements — they use
+    // attributes (d, fill, viewBox, etc.) rather than CSS box-model properties.
+    // Applying box-model styles to <path>, <rect>, etc. just adds noise.
+    const isSvgChild = origEl.namespaceURI === 'http://www.w3.org/2000/svg' && origEl.tagName !== 'svg';
+    if (isSvgChild) continue;
+
     const computed = window.getComputedStyle(origEl);
     const defaults = getDefaultStyles(origEl.tagName);
     const styles: string[] = [];
+    const position = computed.getPropertyValue('position');
 
     for (const prop of VISUAL_PROPERTIES) {
       const value = computed.getPropertyValue(prop);
@@ -113,6 +137,14 @@ function applyComputedStyles(original: Element, clone: Element): void {
       // Skip if it matches the browser default for this element type
       const defaultValue = defaults.get(prop);
       if (value === defaultValue) continue;
+
+      // top/right/bottom/left are irrelevant on statically positioned elements
+      if (position === 'static' && (prop === 'top' || prop === 'right' || prop === 'bottom' || prop === 'left')) {
+        continue;
+      }
+
+      // Skip z-index on statically positioned elements (it has no effect)
+      if (position === 'static' && prop === 'z-index') continue;
 
       styles.push(`${prop}: ${value}`);
     }
@@ -240,14 +272,41 @@ function isTextOnlySpan(node: Node): boolean {
   return el.children.length === 0;
 }
 
+// Attributes that should always be preserved
+const KEEP_ATTRS = new Set([
+  'style', 'src', 'srcset', 'href', 'alt', 'type', 'target', 'rel',
+]);
+
+// SVG-specific attributes that must be kept for rendering
+const SVG_ATTRS = new Set([
+  'd', 'viewBox', 'xmlns', 'fill', 'stroke', 'stroke-width', 'stroke-linecap',
+  'stroke-linejoin', 'stroke-dasharray', 'stroke-dashoffset', 'stroke-miterlimit',
+  'opacity', 'fill-opacity', 'stroke-opacity', 'fill-rule', 'clip-rule', 'clip-path',
+  'cx', 'cy', 'r', 'rx', 'ry', 'x', 'y', 'x1', 'y1', 'x2', 'y2',
+  'width', 'height', 'transform', 'points', 'pathLength',
+  'text-anchor', 'dominant-baseline', 'font-size', 'font-family', 'font-weight',
+  'dx', 'dy', 'offset', 'stop-color', 'stop-opacity', 'gradientTransform',
+  'gradientUnits', 'spreadMethod', 'fx', 'fy',
+  'markerWidth', 'markerHeight', 'refX', 'refY', 'orient',
+  'preserveAspectRatio', 'xlink:href',
+]);
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function isSvgElement(node: Element): boolean {
+  return node.namespaceURI === SVG_NS || node.closest('svg') !== null || node.tagName === 'svg';
+}
+
 function stripAttributes(clone: Element): void {
   const all = [clone, ...Array.from(clone.querySelectorAll('*'))];
   for (const node of all) {
     const toRemove: string[] = [];
+    const inSvg = isSvgElement(node);
     for (const attr of Array.from(node.attributes)) {
-      if (attr.name === 'style' || attr.name === 'src' || attr.name === 'srcset' || attr.name === 'href' || attr.name === 'alt') {
-        continue; // Keep these
-      }
+      if (KEEP_ATTRS.has(attr.name)) continue;
+      if (inSvg && SVG_ATTRS.has(attr.name)) continue;
+      // Keep id/class refs inside SVG (needed for clip-path url(#id) references)
+      if (inSvg && (attr.name === 'id' || attr.name === 'class')) continue;
       toRemove.push(attr.name);
     }
     for (const name of toRemove) {
