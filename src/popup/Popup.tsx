@@ -69,7 +69,10 @@ export function Popup() {
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-base font-semibold text-gray-900">Pablo</h1>
+        <div className="flex items-center gap-2">
+          <img src={chrome.runtime.getURL('icons/logo.svg')} alt="Pablo" className="w-6 h-6" />
+          <h1 className="text-base font-semibold text-gray-900">Pablo</h1>
+        </div>
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor}`}>
           {statusText}
         </span>
