@@ -249,6 +249,31 @@ export interface InteractionPattern {
   elements: string[];
 }
 
+// --- Font Types ---
+
+export interface FontFaceData {
+  family: string;
+  src: string;
+  weight?: string;
+  style?: string;
+  display?: string;
+  unicodeRange?: string;
+}
+
+export interface PseudoContent {
+  selector: string;
+  pseudo: '::before' | '::after';
+  content: string;
+  fontFamily: string;
+  fontSize: string;
+  color: string;
+}
+
+export interface FontData {
+  fontFaces: FontFaceData[];
+  pseudoContent: PseudoContent[];
+}
+
 // --- Clipboard Payload ---
 
 export interface ClipboardPayload {
@@ -270,6 +295,7 @@ export interface ClipboardPayload {
     animations?: AnimationData;
     semanticHints?: SemanticHint[];
     interactionPatterns?: InteractionPattern[];
+    fonts?: FontData;
     summary?: string;
   };
 }

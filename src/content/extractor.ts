@@ -395,6 +395,46 @@ function applyComputedStyles(original: Element, clone: Element, frameworkDefault
         }
       }
     }
+
+    // Materialize ::before and ::after pseudo-elements as <span data-pseudo>
+    for (const pseudo of ['before', 'after'] as const) {
+      const pseudoStyle = window.getComputedStyle(origEl, `::${pseudo}`);
+      const content = pseudoStyle.content;
+      if (!content || content === 'none' || content === 'normal' || content === '""' || content === "''") {
+        continue;
+      }
+
+      const span = document.createElement('span');
+      span.setAttribute('data-pseudo', pseudo);
+
+      // Strip outer quotes from content value (e.g. '"\\e001"' -> '\e001')
+      let textContent = content;
+      if ((textContent.startsWith('"') && textContent.endsWith('"')) ||
+          (textContent.startsWith("'") && textContent.endsWith("'"))) {
+        textContent = textContent.slice(1, -1);
+      }
+      span.textContent = textContent;
+
+      // Apply key styles from the pseudo-element
+      const inlineStyles: string[] = [];
+      const pFontFamily = pseudoStyle.fontFamily;
+      if (pFontFamily) inlineStyles.push(`font-family: ${pFontFamily}`);
+      const pFontSize = pseudoStyle.fontSize;
+      if (pFontSize) inlineStyles.push(`font-size: ${pFontSize}`);
+      const pColor = pseudoStyle.color;
+      if (pColor) inlineStyles.push(`color: ${pColor}`);
+      const pDisplay = pseudoStyle.display;
+      if (pDisplay && pDisplay !== 'none') inlineStyles.push(`display: ${pDisplay}`);
+      if (inlineStyles.length > 0) {
+        span.setAttribute('style', inlineStyles.join('; '));
+      }
+
+      if (pseudo === 'before') {
+        cloneEl.insertBefore(span, cloneEl.firstChild);
+      } else {
+        cloneEl.appendChild(span);
+      }
+    }
   }
 }
 
@@ -483,7 +523,7 @@ function isTextOnlySpan(node: Node): boolean {
 
 // Attributes that should always be preserved
 const KEEP_ATTRS = new Set([
-  'style', 'src', 'srcset', 'href', 'alt', 'type', 'target', 'rel',
+  'style', 'src', 'srcset', 'href', 'alt', 'type', 'target', 'rel', 'data-pseudo',
 ]);
 
 // SVG-specific attributes that must be kept for rendering

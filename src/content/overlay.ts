@@ -3,6 +3,7 @@ import { REACT_BASED_STACKS } from '../shared/types';
 import { detectStack, probeReactViaServiceWorker } from './detector';
 import { extractElement, getStrategy } from './extractor';
 import { extractAnimations, mergeAnimationData } from './animation-extractor';
+import { extractFonts } from './font-extractor';
 import { recordMutations } from './mutation-recorder';
 import { MSG } from '../shared/messages';
 
@@ -555,6 +556,10 @@ async function handleExtraction(target: Element): Promise<void> {
     // Detect interaction patterns
     const interactionPatterns = detectInteractionPatterns(target);
 
+    // Extract font data
+    const fonts = extractFonts(target);
+    console.log('[Pablo] Font extraction:', fonts.fontFaces.length, 'font-faces,', fonts.pseudoContent.length, 'pseudo-elements');
+
     // Generate summary
     const summary = generateComponentSummary(target, semanticHints);
 
@@ -585,6 +590,7 @@ async function handleExtraction(target: Element): Promise<void> {
         ...(animations ? { animations } : {}),
         ...(semanticHints.length > 0 ? { semanticHints } : {}),
         ...(interactionPatterns.length > 0 ? { interactionPatterns } : {}),
+        ...(fonts && (fonts.fontFaces.length > 0 || fonts.pseudoContent.length > 0) ? { fonts } : {}),
         summary,
       },
     };
