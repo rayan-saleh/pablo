@@ -7,6 +7,105 @@ import { webflowStrategy } from './strategies/webflow';
 import { framerStrategy } from './strategies/framer';
 import { reactStrategy } from './strategies/react';
 
+// --- HTML Pretty-Printer ---
+
+const INLINE_ELEMENTS = new Set([
+  'span', 'a', 'em', 'strong', 'b', 'i', 'img', 'br',
+]);
+
+const VOID_ELEMENTS = new Set([
+  'img', 'br', 'hr', 'input',
+]);
+
+const MAX_FORMAT_SIZE = 200_000; // 200KB guard
+
+function formatHtml(html: string): string {
+  if (html.length > MAX_FORMAT_SIZE) return html;
+
+  // Tokenize into tags and text segments
+  const tokens: string[] = [];
+  const tagRegex = /(<\/?[a-zA-Z][^>]*\/?>)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = tagRegex.exec(html)) !== null) {
+    if (match.index > lastIndex) {
+      const text = html.slice(lastIndex, match.index);
+      if (text.trim()) tokens.push(text);
+    }
+    tokens.push(match[1]);
+    lastIndex = tagRegex.lastIndex;
+  }
+  if (lastIndex < html.length) {
+    const text = html.slice(lastIndex);
+    if (text.trim()) tokens.push(text);
+  }
+
+  const lines: string[] = [];
+  let depth = 0;
+  const indent = () => '  '.repeat(depth);
+
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    const isTag = token.startsWith('<');
+
+    if (!isTag) {
+      // Text content — will be handled inline with surrounding tags where possible
+      lines.push(indent() + token.trim());
+      continue;
+    }
+
+    const isClosing = token.startsWith('</');
+    const selfClosing = token.endsWith('/>');
+    const tagNameMatch = token.match(/<\/?([a-zA-Z][a-zA-Z0-9]*)/);
+    const tagName = tagNameMatch ? tagNameMatch[1].toLowerCase() : '';
+    const isVoid = VOID_ELEMENTS.has(tagName);
+    const isInline = INLINE_ELEMENTS.has(tagName);
+
+    if (isClosing) {
+      depth = Math.max(0, depth - 1);
+      // If the previous line is the matching open tag with only text between,
+      // collapse them onto one line
+      if (isInline && lines.length >= 2) {
+        const prev = lines[lines.length - 1];
+        const prevPrev = lines[lines.length - 2];
+        const openPattern = new RegExp(`^\\s*<${tagName}[\\s>]`);
+        if (!prev.trim().startsWith('<') && openPattern.test(prevPrev)) {
+          const collapsed = prevPrev.trimEnd() + prev.trim() + token;
+          lines.splice(lines.length - 2, 2, collapsed);
+          continue;
+        }
+      }
+      lines.push(indent() + token);
+      continue;
+    }
+
+    if (selfClosing || isVoid) {
+      lines.push(indent() + token);
+      continue;
+    }
+
+    // Opening tag
+    lines.push(indent() + token);
+    if (!isInline) {
+      depth++;
+    } else {
+      // For inline elements, check if next token is text and the one after is the closing tag
+      const next = tokens[i + 1];
+      const nextNext = tokens[i + 2];
+      if (next && !next.startsWith('<') && nextNext && nextNext === `</${tagName}>`) {
+        // Collapse: <span>text</span> on one line
+        lines[lines.length - 1] = indent() + token + next.trim() + nextNext;
+        i += 2;
+        continue;
+      }
+      depth++;
+    }
+  }
+
+  return lines.join('\n');
+}
+
 const VISUAL_PROPERTIES = [
   'display', 'position', 'top', 'right', 'bottom', 'left', 'float', 'z-index',
   'overflow', 'overflow-x', 'overflow-y',
@@ -141,7 +240,8 @@ export function extractElement(element: Element, stack: TechStack): string {
   const clone = target.cloneNode(true) as Element;
 
   // Walk original + clone in parallel, applying computed styles
-  applyComputedStyles(target, clone);
+  const frameworkDefaults = strategy.getFrameworkDefaults?.() ?? null;
+  applyComputedStyles(target, clone, frameworkDefaults);
 
   // Run strategy-specific cleanup
   strategy.cleanup(clone);
@@ -152,7 +252,7 @@ export function extractElement(element: Element, stack: TechStack): string {
   // Merge consecutive identical-style spans (e.g. per-character Framer spans)
   mergeAdjacentSpans(clone);
 
-  const html = clone.outerHTML;
+  const html = formatHtml(clone.outerHTML);
   console.log('[CC] Final HTML size:', html.length);
 
   return html;
@@ -189,7 +289,7 @@ function getDefaultStyles(tagName: string): Map<string, string> {
   return defaults;
 }
 
-function applyComputedStyles(original: Element, clone: Element): void {
+function applyComputedStyles(original: Element, clone: Element, frameworkDefaults: Map<string, string> | null): void {
   // Clear cache at the start of each extraction
   defaultStyleCache.clear();
 
@@ -240,6 +340,20 @@ function applyComputedStyles(original: Element, clone: Element): void {
       if (prop === 'cursor' && value === 'pointer' && isClickable) continue;
 
       styles.set(prop, value);
+    }
+
+    // Filter framework defaults (e.g. Framer runtime noise)
+    if (frameworkDefaults) {
+      for (const [fdProp, fdValue] of frameworkDefaults) {
+        if (styles.get(fdProp) !== fdValue) continue;
+        // Positional props: only remove when position:relative and z-index:auto
+        if (fdProp === 'top' || fdProp === 'right' || fdProp === 'bottom' || fdProp === 'left') {
+          if (position !== 'relative') continue;
+          const zIndex = computed.getPropertyValue('z-index');
+          if (zIndex !== 'auto') continue;
+        }
+        styles.delete(fdProp);
+      }
     }
 
     postProcessStyles(styles);

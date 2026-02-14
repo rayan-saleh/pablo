@@ -22,4 +22,14 @@ export const framerStrategy: Strategy = {
     // This shell exists so the strategy interface is satisfied.
     return {};
   },
+  getFrameworkDefaults(): Map<string, string> {
+    return new Map<string, string>([
+      ['top', '0px'],
+      ['right', '0px'],
+      ['bottom', '0px'],
+      ['left', '0px'],
+      ['flex-shrink', '0'],
+      ['will-change', 'transform'],
+    ]);
+  },
 };

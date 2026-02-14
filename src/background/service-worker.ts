@@ -401,6 +401,25 @@ function collectFiberInMainWorld(): {
     return motion as any;
   }
 
+  // --- Minified detection helpers ---
+
+  function isMinifiedName(name: string): boolean {
+    if (name.length <= 2) return true;
+    // 3 lowercase chars is classic Terser output (e.g. "xt", "nr", "dn")
+    if (name.length === 3 && /^[a-z]{3}$/.test(name)) return true;
+    return false;
+  }
+
+  function isMinifiedSource(source: string): boolean {
+    if (!source || source === '/* source unavailable */') return false;
+    // Single-line and long → likely minified
+    if (!source.includes('\n') && source.length > 200) return true;
+    // High semicolon density → likely minified
+    const semicolons = (source.match(/;/g) || []).length;
+    if (source.length > 100 && semicolons / source.length > 0.05) return true;
+    return false;
+  }
+
   // --- Main collection logic ---
 
   const fiber = getFiber(target);
@@ -431,7 +450,7 @@ function collectFiberInMainWorld(): {
     layoutId?: string;
     layout?: boolean | string;
   }[] = [];
-  const seenMotionComponents = new Set<string>();
+  const motionInstanceCount = new Map<string, number>();
 
   function collectChildNames(parentFiber: any, parentName: string): void {
     const parentData = componentMap.get(parentName)!;
@@ -469,7 +488,18 @@ function collectFiberInMainWorld(): {
             sourceCode = sourceCode.slice(0, MAX_SOURCE_LENGTH) + '...';
           }
         } catch { sourceCode = '/* source unavailable */'; }
-        componentMap.set(displayName, { displayName, sourceCode, instances: [], children: [] });
+
+        // Mark minified components
+        const minified = isMinifiedName(name) && isMinifiedSource(sourceCode);
+        if (minified) {
+          sourceCode = '/* minified */';
+        }
+        componentMap.set(displayName, {
+          displayName: minified ? 'Minified_' + displayName : displayName,
+          sourceCode,
+          instances: [],
+          children: [],
+        });
       }
 
       const data = componentMap.get(displayName)!;
@@ -481,12 +511,33 @@ function collectFiberInMainWorld(): {
       }
 
       // Detect Framer Motion components
-      if (isMotionComponent(fiberProps) && !seenMotionComponents.has(displayName)) {
-        seenMotionComponents.add(displayName);
-        motionComponents.push(extractMotionProps(displayName, fiberProps));
+      if (isMotionComponent(fiberProps)) {
+        const count = motionInstanceCount.get(displayName) || 0;
+        if (count < MAX_INSTANCES_PER_TYPE) {
+          motionInstanceCount.set(displayName, count + 1);
+          const motionName = count > 0 ? `${displayName}_${count + 1}` : displayName;
+          motionComponents.push(extractMotionProps(motionName, fiberProps));
+          console.log('[CC] Motion props found on component fiber:', displayName, 'tag:', fiber.tag, 'keys:', MOTION_PROP_KEYS.filter(k => k in fiberProps));
+        }
       }
 
       collectChildNames(fiber, displayName);
+    }
+
+    // Check host elements (tag 5) for motion props — Framer's motion.div renders as a host element
+    if (fiber.tag === 5 && fiber.memoizedProps) {
+      const hostProps = fiber.memoizedProps;
+      if (isMotionComponent(hostProps)) {
+        const hostType = typeof fiber.type === 'string' ? fiber.type : 'div';
+        const motionName = `${hostType}_motion`;
+        const count = motionInstanceCount.get(motionName) || 0;
+        if (count < MAX_INSTANCES_PER_TYPE) {
+          motionInstanceCount.set(motionName, count + 1);
+          const instanceName = count > 0 ? `${motionName}_${count + 1}` : motionName;
+          motionComponents.push(extractMotionProps(instanceName, hostProps));
+          console.log('[CC] Motion props found on host fiber:', hostType, 'tag:', fiber.tag, 'keys:', MOTION_PROP_KEYS.filter(k => k in hostProps));
+        }
+      }
     }
 
     if (fiber.child) walkFiber(fiber.child);
@@ -494,6 +545,37 @@ function collectFiberInMainWorld(): {
   }
 
   walkFiber(rootFiber);
+
+  // Prune fully-minified components, lifting their children to the parent
+  const minifiedNames = new Set<string>();
+  for (const [key, data] of componentMap) {
+    if (data.displayName.startsWith('Minified_')) {
+      minifiedNames.add(key);
+    }
+  }
+  if (minifiedNames.size > 0) {
+    // For each parent, replace minified children with the minified component's children
+    for (const data of componentMap.values()) {
+      const expanded: string[] = [];
+      for (const childName of data.children) {
+        if (minifiedNames.has(childName)) {
+          const minifiedData = componentMap.get(childName);
+          if (minifiedData) {
+            for (const grandchild of minifiedData.children) {
+              if (!expanded.includes(grandchild)) expanded.push(grandchild);
+            }
+          }
+        } else {
+          if (!expanded.includes(childName)) expanded.push(childName);
+        }
+      }
+      data.children = expanded;
+    }
+    // Remove minified entries from the map
+    for (const name of minifiedNames) {
+      componentMap.delete(name);
+    }
+  }
 
   if (componentMap.size === 0 || componentMap.size > MAX_COMPONENT_TYPES) return null;
 
@@ -564,6 +646,12 @@ function collectGsapInMainWorld(): {
     return `${tag}${cls}` || tag;
   }
 
+  // Find the scoping target element (set by overlay.ts)
+  const scopeTarget = document.querySelector('[data-cc-target-gsap]');
+  if (scopeTarget) scopeTarget.removeAttribute('data-cc-target-gsap');
+  // If we have a scope target, only look within its subtree
+  const scopeRoot: Element | Document = scopeTarget || document;
+
   // Search for GSAP in various locations
   const w = window as any;
   const gsap = w.gsap || w.TweenMax?.__proto__?.constructor || null;
@@ -574,7 +662,7 @@ function collectGsapInMainWorld(): {
 
   // Check if any elements have GSAP-set inline styles (opacity:0 is a strong signal)
   let gsapStyleSignals = 0;
-  const allElements = document.querySelectorAll('[style*="opacity: 0"], [style*="opacity:0"], [style*="visibility: hidden"], [style*="translate"]');
+  const allElements = scopeRoot.querySelectorAll('[style*="opacity: 0"], [style*="opacity:0"], [style*="visibility: hidden"], [style*="translate"]');
   // Filter to only count elements that look like scroll-reveal targets (not intentionally hidden elements like screen-reader text)
   for (const el of Array.from(allElements).slice(0, 50)) {
     const rect = el.getBoundingClientRect();
@@ -613,6 +701,9 @@ function collectGsapInMainWorld(): {
       const triggers = ScrollTrigger.getAll();
       for (const trigger of triggers.slice(0, 30)) {
         const triggerEl = trigger.trigger;
+        // Scope: skip triggers outside the selected component
+        if (scopeTarget && triggerEl instanceof Element && !scopeTarget.contains(triggerEl)) continue;
+
         const scrollerEl = trigger.scroller;
         const vars = trigger.vars || {};
 
@@ -640,8 +731,10 @@ function collectGsapInMainWorld(): {
         const targets = tween.targets();
         if (!targets || targets.length === 0) continue;
 
-        const target = targets[0];
-        if (!(target instanceof Element)) continue;
+        const tweenTarget = targets[0];
+        if (!(tweenTarget instanceof Element)) continue;
+        // Scope: skip tweens targeting elements outside the selected component
+        if (scopeTarget && !scopeTarget.contains(tweenTarget)) continue;
 
         const vars = tween.vars || {};
         const properties: Record<string, unknown> = {};
@@ -658,7 +751,7 @@ function collectGsapInMainWorld(): {
         else if (tween.data === 'isFromStart' || tween._from) type = 'from';
 
         result.tweens.push({
-          targetSelector: describeElement(target),
+          targetSelector: describeElement(tweenTarget),
           type,
           properties,
           duration: tween._dur,

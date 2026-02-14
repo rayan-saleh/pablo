@@ -1,4 +1,4 @@
-import type { InspectorMode, TechStack, ClipboardPayload, StrategyKey, ComponentData, ComponentTree, AnimationData, FramerMotionData, GsapData } from '../shared/types';
+import type { InspectorMode, TechStack, ClipboardPayload, StrategyKey, ComponentData, ComponentTree, AnimationData, FramerMotionData, GsapData, SemanticHint, InteractionPattern } from '../shared/types';
 import { REACT_BASED_STACKS } from '../shared/types';
 import { detectStack, probeReactViaServiceWorker } from './detector';
 import { extractElement, getStrategy } from './extractor';
@@ -128,10 +128,13 @@ function collectFiberViaServiceWorker(target: Element): Promise<{
 
 /**
  * Request GSAP animation data from the service worker (runs in main world).
+ * Marks the target element so GSAP collection is scoped to its subtree.
  */
-function collectGsapViaServiceWorker(): Promise<GsapData | null> {
+function collectGsapViaServiceWorker(target: Element): Promise<GsapData | null> {
   return new Promise((resolve) => {
+    target.setAttribute('data-cc-target-gsap', '1');
     chrome.runtime.sendMessage({ type: MSG.COLLECT_GSAP }, (response) => {
+      target.removeAttribute('data-cc-target-gsap');
       if (chrome.runtime.lastError) {
         resolve(null);
         return;
@@ -164,6 +167,197 @@ function buildComponentTree(components: ComponentData[], rootName: string): Comp
   }
 
   return build(rootName);
+}
+
+// --- Semantic Analysis ---
+
+function buildRelativeSelector(root: Element, target: Element): string {
+  const parts: string[] = [];
+  let current: Element | null = target;
+  while (current && current !== root) {
+    const parent: Element | null = current.parentElement;
+    if (!parent) break;
+    const siblings = Array.from(parent.children);
+    const index = siblings.indexOf(current) + 1;
+    const tag = current.tagName.toLowerCase();
+    parts.unshift(`${tag}:nth-child(${index})`);
+    current = parent;
+  }
+  return parts.join(' > ') || target.tagName.toLowerCase();
+}
+
+function inferSemanticRoles(element: Element): SemanticHint[] {
+  const hints: SemanticHint[] = [];
+  const all = [element, ...Array.from(element.querySelectorAll('*'))];
+
+  for (const el of all) {
+    if (!(el instanceof HTMLElement)) continue;
+    const tag = el.tagName.toLowerCase();
+    const text = el.textContent?.trim() || '';
+    const selector = el === element ? tag : buildRelativeSelector(element, el);
+    const computed = window.getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+
+    // heading: h1-h6 or large font with short text
+    if (/^h[1-6]$/.test(tag)) {
+      hints.push({ selector, role: 'heading', reason: `${tag} element` });
+      continue;
+    }
+    const fontSize = parseFloat(computed.fontSize);
+    if (fontSize >= 28 && text.length > 0 && text.length < 120 && el.children.length <= 3) {
+      hints.push({ selector, role: 'heading', reason: `large text (${Math.round(fontSize)}px)` });
+      continue;
+    }
+
+    // badge: small text, short height, colored background, border-radius
+    if (text.length > 0 && text.length < 30 && rect.height < 40 && rect.height > 0) {
+      const bg = computed.backgroundColor;
+      const radius = parseFloat(computed.borderRadius);
+      const hasColoredBg = bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent';
+      if (hasColoredBg && radius > 0) {
+        hints.push({ selector, role: 'badge', reason: 'small colored pill' });
+        continue;
+      }
+    }
+
+    // cta-button: a or button with short text and styled background
+    if ((tag === 'a' || tag === 'button') && text.length > 0 && text.length < 40) {
+      const bg = computed.backgroundColor;
+      const hasColoredBg = bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent';
+      if (hasColoredBg) {
+        hints.push({ selector, role: 'cta-button', reason: `${tag} with styled background` });
+        continue;
+      }
+    }
+
+    // image-container: div wrapping only an img
+    if (tag === 'div' && el.children.length === 1 && el.children[0]?.tagName === 'IMG') {
+      hints.push({ selector, role: 'image-container', reason: 'div wrapping img' });
+      continue;
+    }
+
+    // video: element containing a video tag
+    if (tag === 'video' || el.querySelector('video')) {
+      if (tag === 'video' || (el.children.length <= 3 && el.querySelector('video'))) {
+        hints.push({ selector, role: 'video', reason: 'contains video element' });
+        continue;
+      }
+    }
+
+    // icon: small SVG
+    if (tag === 'svg' && rect.width <= 32 && rect.height <= 32 && rect.width > 0) {
+      hints.push({ selector, role: 'icon', reason: `small SVG (${Math.round(rect.width)}x${Math.round(rect.height)})` });
+      continue;
+    }
+  }
+
+  return hints;
+}
+
+// --- Interaction Pattern Detection ---
+
+function detectInteractionPatterns(element: Element): InteractionPattern[] {
+  const patterns: InteractionPattern[] = [];
+
+  // Pattern 1: hover-text-slide — duplicate text where one instance has opacity:0
+  const textMap = new Map<string, Element[]>();
+  const allEls = Array.from(element.querySelectorAll('*'));
+  for (const el of allEls) {
+    if (!(el instanceof HTMLElement)) continue;
+    if (el.children.length > 0) continue; // leaf text nodes only
+    const text = el.textContent?.trim();
+    if (!text || text.length < 2) continue;
+    const list = textMap.get(text) || [];
+    list.push(el);
+    textMap.set(text, list);
+  }
+  for (const [text, elements] of textMap) {
+    if (elements.length < 2) continue;
+    const hasHidden = elements.some(el => {
+      const style = window.getComputedStyle(el);
+      return style.opacity === '0';
+    });
+    if (hasHidden) {
+      patterns.push({
+        type: 'hover-text-slide',
+        description: `Duplicate text "${text.slice(0, 40)}" with one instance at opacity:0 — likely hover slide/reveal animation`,
+        elements: elements.map(el => buildRelativeSelector(element, el)),
+      });
+    }
+  }
+
+  // Pattern 2: clip-reveal — overflow:hidden parent with transformed children
+  for (const el of allEls) {
+    if (!(el instanceof HTMLElement)) continue;
+    const style = window.getComputedStyle(el);
+    if (style.overflow !== 'hidden') continue;
+    for (const child of Array.from(el.children)) {
+      if (!(child instanceof HTMLElement)) continue;
+      const childStyle = window.getComputedStyle(child);
+      const transform = childStyle.transform;
+      if (transform && transform !== 'none') {
+        const n = transform.replace(/\s/g, '');
+        if (n !== 'matrix(1,0,0,1,0,0)' && n !== 'matrix3d(1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1)') {
+          patterns.push({
+            type: 'clip-reveal',
+            description: 'overflow:hidden parent with transformed child — likely clip/reveal animation',
+            elements: [buildRelativeSelector(element, el), buildRelativeSelector(element, child)],
+          });
+          break; // one per parent
+        }
+      }
+    }
+  }
+
+  return patterns;
+}
+
+// --- Component Summary ---
+
+function generateComponentSummary(element: Element, semanticHints?: SemanticHint[]): string {
+  const rect = element.getBoundingClientRect();
+  const parts: string[] = [];
+
+  // Dimensions
+  parts.push(`${Math.round(rect.width)}x${Math.round(rect.height)}px`);
+
+  // Layout type
+  const style = window.getComputedStyle(element);
+  if (style.display.includes('flex')) parts.push('flex container');
+  else if (style.display.includes('grid')) parts.push('grid container');
+  else parts.push(style.display + ' container');
+
+  // Headings
+  const headings = element.querySelectorAll('h1, h2, h3, h4, h5, h6');
+  for (const h of Array.from(headings).slice(0, 2)) {
+    const text = h.textContent?.trim();
+    if (text) parts.push(`heading: "${text.length > 60 ? text.slice(0, 60) + '...' : text}"`);
+  }
+
+  // Buttons/CTAs
+  const buttons = element.querySelectorAll('a, button');
+  const buttonTexts: string[] = [];
+  for (const btn of Array.from(buttons).slice(0, 3)) {
+    const text = btn.textContent?.trim();
+    if (text && text.length < 40) buttonTexts.push(`"${text}"`);
+  }
+  if (buttonTexts.length > 0) parts.push(`buttons: ${buttonTexts.join(', ')}`);
+
+  // Images
+  const imgCount = element.querySelectorAll('img').length;
+  if (imgCount > 0) parts.push(`${imgCount} image${imgCount > 1 ? 's' : ''}`);
+
+  // Videos
+  const videoCount = element.querySelectorAll('video').length;
+  if (videoCount > 0) parts.push(`${videoCount} video${videoCount > 1 ? 's' : ''}`);
+
+  // Semantic roles summary
+  if (semanticHints && semanticHints.length > 0) {
+    const roles = [...new Set(semanticHints.map(h => h.role))];
+    parts.push(`contains: ${roles.join(', ')}`);
+  }
+
+  return parts.join(' | ');
 }
 
 // --- Event handlers ---
@@ -224,7 +418,7 @@ async function handleExtraction(target: Element): Promise<void> {
     }
 
     // Collect GSAP data from main world (works for all stacks)
-    const gsapData = await collectGsapViaServiceWorker();
+    const gsapData = await collectGsapViaServiceWorker(target);
     if (gsapData) {
       console.log('[CC] GSAP data found:', gsapData.version || 'detected',
         'scrollTriggers:', gsapData.scrollTriggers.length, 'tweens:', gsapData.tweens.length);
@@ -252,12 +446,22 @@ async function handleExtraction(target: Element): Promise<void> {
       }
     }
 
+    // Infer semantic roles
+    const semanticHints = inferSemanticRoles(target);
+
+    // Detect interaction patterns
+    const interactionPatterns = detectInteractionPatterns(target);
+
+    // Generate summary
+    const summary = generateComponentSummary(target, semanticHints);
+
     // Build clipboard payload
     const payload: ClipboardPayload = {
       source: {
         url: window.location.href,
         title: document.title,
         timestamp: new Date().toISOString(),
+        viewport: { width: window.innerWidth, height: window.innerHeight },
       },
       detection: {
         framework: detectedStack,
@@ -269,6 +473,9 @@ async function handleExtraction(target: Element): Promise<void> {
         html,
         ...(tree ? { tree } : {}),
         ...(animations ? { animations } : {}),
+        ...(semanticHints.length > 0 ? { semanticHints } : {}),
+        ...(interactionPatterns.length > 0 ? { interactionPatterns } : {}),
+        summary,
       },
     };
 

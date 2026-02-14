@@ -44,6 +44,7 @@ export interface Strategy {
   expandSelection(el: Element): Element;
   cleanup(clone: Element): void;
   extractAnimations?(el: Element): Partial<AnimationData>;
+  getFrameworkDefaults?(): Map<string, string>;
 }
 
 // --- Animation Types ---
@@ -190,6 +191,20 @@ export interface ComponentTree {
   children: ComponentTree[];
 }
 
+// --- Semantic & Interaction Types ---
+
+export interface SemanticHint {
+  selector: string;
+  role: string;
+  reason: string;
+}
+
+export interface InteractionPattern {
+  type: string;
+  description: string;
+  elements: string[];
+}
+
 // --- Clipboard Payload ---
 
 export interface ClipboardPayload {
@@ -197,6 +212,7 @@ export interface ClipboardPayload {
     url: string;
     title: string;
     timestamp: string;
+    viewport: { width: number; height: number };
   };
   detection: {
     framework: TechStack;
@@ -208,5 +224,8 @@ export interface ClipboardPayload {
     tree?: ComponentTree;
     html: string;
     animations?: AnimationData;
+    semanticHints?: SemanticHint[];
+    interactionPatterns?: InteractionPattern[];
+    summary?: string;
   };
 }
