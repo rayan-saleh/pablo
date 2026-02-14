@@ -51,6 +51,19 @@ function collectFiberInMainWorld(): {
     children: string[];
   }[];
   rootComponentName: string;
+  motionComponents: {
+    componentName: string;
+    initial?: Record<string, unknown>;
+    animate?: Record<string, unknown>;
+    exit?: Record<string, unknown>;
+    whileHover?: Record<string, unknown>;
+    whileTap?: Record<string, unknown>;
+    whileInView?: Record<string, unknown>;
+    transition?: Record<string, unknown>;
+    variants?: Record<string, unknown>;
+    layoutId?: string;
+    layout?: boolean | string;
+  }[];
 } | null {
   const MAX_COMPONENT_TYPES = 50;
 
@@ -161,6 +174,48 @@ function collectFiberInMainWorld(): {
     return sanitizeValue(props, new WeakSet(), 0) as Record<string, unknown>;
   }
 
+  // --- Framer Motion prop keys ---
+  const MOTION_PROP_KEYS = [
+    'initial', 'animate', 'exit', 'whileHover', 'whileTap', 'whileInView',
+    'transition', 'variants', 'layoutId', 'layout',
+  ];
+
+  function isMotionComponent(props: Record<string, unknown>): boolean {
+    return MOTION_PROP_KEYS.some(key => key in props && props[key] !== undefined);
+  }
+
+  function extractMotionProps(
+    componentName: string,
+    props: Record<string, unknown>,
+  ): {
+    componentName: string;
+    initial?: Record<string, unknown>;
+    animate?: Record<string, unknown>;
+    exit?: Record<string, unknown>;
+    whileHover?: Record<string, unknown>;
+    whileTap?: Record<string, unknown>;
+    whileInView?: Record<string, unknown>;
+    transition?: Record<string, unknown>;
+    variants?: Record<string, unknown>;
+    layoutId?: string;
+    layout?: boolean | string;
+  } {
+    const motion: Record<string, unknown> = { componentName };
+    for (const key of MOTION_PROP_KEYS) {
+      if (key in props && props[key] !== undefined) {
+        const val = props[key];
+        if (key === 'layoutId' && typeof val === 'string') {
+          motion[key] = val;
+        } else if (key === 'layout' && (typeof val === 'boolean' || typeof val === 'string')) {
+          motion[key] = val;
+        } else if (typeof val === 'object' && val !== null) {
+          motion[key] = sanitizeValue(val, new WeakSet(), 0);
+        }
+      }
+    }
+    return motion as any;
+  }
+
   // --- Main collection logic ---
 
   const fiber = getFiber(target);
@@ -178,6 +233,20 @@ function collectFiberInMainWorld(): {
 
   const componentMap = new Map<string, CollectedComponent>();
   const typeToName = new Map<Function, string>();
+  const motionComponents: {
+    componentName: string;
+    initial?: Record<string, unknown>;
+    animate?: Record<string, unknown>;
+    exit?: Record<string, unknown>;
+    whileHover?: Record<string, unknown>;
+    whileTap?: Record<string, unknown>;
+    whileInView?: Record<string, unknown>;
+    transition?: Record<string, unknown>;
+    variants?: Record<string, unknown>;
+    layoutId?: string;
+    layout?: boolean | string;
+  }[] = [];
+  const seenMotionComponents = new Set<string>();
 
   function collectChildNames(parentFiber: any, parentName: string): void {
     const parentData = componentMap.get(parentName)!;
@@ -219,10 +288,17 @@ function collectFiberInMainWorld(): {
       }
 
       const data = componentMap.get(displayName)!;
+      const fiberProps = fiber.memoizedProps || {};
       if (data.instances.length < MAX_INSTANCES_PER_TYPE) {
         data.instances.push({
-          props: sanitizeProps(fiber.memoizedProps || {}),
+          props: sanitizeProps(fiberProps),
         });
+      }
+
+      // Detect Framer Motion components
+      if (isMotionComponent(fiberProps) && !seenMotionComponents.has(displayName)) {
+        seenMotionComponents.add(displayName);
+        motionComponents.push(extractMotionProps(displayName, fiberProps));
       }
 
       collectChildNames(fiber, displayName);
@@ -253,7 +329,168 @@ function collectFiberInMainWorld(): {
 
   const rootName = getComponentName(unwrapComponentType(rootFiber.type));
 
-  return { components: sorted, rootComponentName: rootName };
+  return { components: sorted, rootComponentName: rootName, motionComponents };
+}
+
+/**
+ * Collects GSAP animation data from the page's main world.
+ * Checks for window.gsap, ScrollTrigger instances, and active tweens.
+ */
+function collectGsapInMainWorld(): {
+  detected: boolean;
+  version?: string;
+  scrollTriggers: {
+    triggerSelector: string;
+    scroller?: string;
+    start?: string;
+    end?: string;
+    pin?: boolean;
+    scrub?: boolean | number;
+    description?: string;
+  }[];
+  tweens: {
+    targetSelector: string;
+    type: string;
+    properties: Record<string, unknown>;
+    duration?: number;
+    delay?: number;
+    ease?: string;
+  }[];
+} | null {
+  // Helper to describe an element as a CSS selector
+  function describeElement(el: Element | null): string {
+    if (!el || !(el instanceof Element)) return 'unknown';
+    const tag = el.tagName.toLowerCase();
+    if (el.id) return `${tag}#${el.id}`;
+    const cls = el.className && typeof el.className === 'string'
+      ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.')
+      : '';
+    return `${tag}${cls}` || tag;
+  }
+
+  // Search for GSAP in various locations
+  const w = window as any;
+  const gsap = w.gsap || w.TweenMax?.__proto__?.constructor || null;
+  const ScrollTrigger = w.ScrollTrigger || (gsap && gsap.core?.globals?.()?.ScrollTrigger) || null;
+
+  // Also check for GSAP markers in the DOM (even if gsap object isn't on window)
+  const hasGsapMarkers = document.querySelector('.gsap-marker-start, .gsap-marker-end, [data-scroll-container]') !== null;
+
+  // Check if any elements have GSAP-set inline styles (opacity:0 is a strong signal)
+  let gsapStyleSignals = 0;
+  const allElements = document.querySelectorAll('[style*="opacity: 0"], [style*="opacity:0"], [style*="visibility: hidden"], [style*="translate"]');
+  // Filter to only count elements that look like scroll-reveal targets (not intentionally hidden elements like screen-reader text)
+  for (const el of Array.from(allElements).slice(0, 50)) {
+    const rect = el.getBoundingClientRect();
+    // Skip tiny elements (likely screen-reader only)
+    if (rect.width < 10 || rect.height < 10) continue;
+    const style = el.getAttribute('style') || '';
+    if (style.includes('opacity: 0') || style.includes('opacity:0')) {
+      gsapStyleSignals++;
+    }
+  }
+
+  if (!gsap && !ScrollTrigger && !hasGsapMarkers && gsapStyleSignals === 0) {
+    return null;
+  }
+
+  const result: {
+    detected: boolean;
+    version?: string;
+    scrollTriggers: any[];
+    tweens: any[];
+  } = {
+    detected: true,
+    scrollTriggers: [],
+    tweens: [],
+  };
+
+  // Get GSAP version
+  if (gsap?.version) {
+    result.version = gsap.version;
+  }
+
+  // Enumerate ScrollTrigger instances
+  if (ScrollTrigger && typeof ScrollTrigger.getAll === 'function') {
+    try {
+      const triggers = ScrollTrigger.getAll();
+      for (const trigger of triggers.slice(0, 30)) {
+        const triggerEl = trigger.trigger;
+        const scrollerEl = trigger.scroller;
+        const vars = trigger.vars || {};
+
+        result.scrollTriggers.push({
+          triggerSelector: describeElement(triggerEl),
+          scroller: scrollerEl && scrollerEl !== document.documentElement ? describeElement(scrollerEl) : undefined,
+          start: typeof vars.start === 'string' ? vars.start : (trigger.start != null ? String(trigger.start) : undefined),
+          end: typeof vars.end === 'string' ? vars.end : (trigger.end != null ? String(trigger.end) : undefined),
+          pin: vars.pin ? true : undefined,
+          scrub: vars.scrub != null ? vars.scrub : undefined,
+          description: triggerEl ? `ScrollTrigger on ${describeElement(triggerEl)}` : 'ScrollTrigger instance',
+        });
+      }
+    } catch {
+      // ScrollTrigger.getAll failed
+    }
+  }
+
+  // Enumerate active tweens from the global timeline
+  if (gsap && typeof gsap.globalTimeline?.getChildren === 'function') {
+    try {
+      const tweens = gsap.globalTimeline.getChildren(true, true, false).slice(0, 30);
+      for (const tween of tweens) {
+        if (!tween.targets || typeof tween.targets !== 'function') continue;
+        const targets = tween.targets();
+        if (!targets || targets.length === 0) continue;
+
+        const target = targets[0];
+        if (!(target instanceof Element)) continue;
+
+        const vars = tween.vars || {};
+        const properties: Record<string, unknown> = {};
+        for (const key of Object.keys(vars)) {
+          if (['onComplete', 'onUpdate', 'onStart', 'onReverseComplete', 'callbackScope',
+               'lazy', 'immediateRender', 'id', 'scrollTrigger', 'overwrite'].includes(key)) continue;
+          if (typeof vars[key] === 'function') continue;
+          properties[key] = vars[key];
+        }
+
+        // Determine tween type
+        let type = 'to';
+        if (tween.data === 'isSet' || tween._dur === 0) type = 'set';
+        else if (tween.data === 'isFromStart' || tween._from) type = 'from';
+
+        result.tweens.push({
+          targetSelector: describeElement(target),
+          type,
+          properties,
+          duration: tween._dur,
+          delay: tween._delay || undefined,
+          ease: vars.ease || undefined,
+        });
+      }
+    } catch {
+      // Timeline enumeration failed
+    }
+  }
+
+  // If we found no API data but detected signals, still report detection
+  if (result.scrollTriggers.length === 0 && result.tweens.length === 0) {
+    if (gsapStyleSignals > 0) {
+      result.scrollTriggers.push({
+        triggerSelector: 'multiple-elements',
+        description: `${gsapStyleSignals} elements with inline opacity:0 detected (likely GSAP scroll-reveal)`,
+      });
+    }
+    if (hasGsapMarkers) {
+      result.scrollTriggers.push({
+        triggerSelector: 'page',
+        description: 'GSAP ScrollTrigger debug markers detected in DOM',
+      });
+    }
+  }
+
+  return result;
 }
 
 // --- Message routing ---
@@ -324,6 +561,24 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
         target: { tabId },
         world: 'MAIN',
         func: collectFiberInMainWorld,
+      }).then((results) => {
+        sendResponse({ data: results?.[0]?.result ?? null });
+      }).catch(() => {
+        sendResponse({ data: null });
+      });
+      return true;
+    }
+
+    case MSG.COLLECT_GSAP: {
+      const tabId = sender.tab?.id;
+      if (!tabId) {
+        sendResponse({ data: null });
+        return true;
+      }
+      chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: collectGsapInMainWorld,
       }).then((results) => {
         sendResponse({ data: results?.[0]?.result ?? null });
       }).catch(() => {

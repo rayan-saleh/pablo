@@ -1,9 +1,26 @@
 import type { TechStack } from '../shared/types';
+import { MSG } from '../shared/messages';
 
 export function detectStack(): TechStack {
   const result = detectStackInner();
   console.log('[CC] Detected tech stack:', result);
   return result;
+}
+
+/**
+ * Async confirmation: asks the service worker to probe for React in the main world.
+ * Returns true if React fiber keys are found on DOM elements.
+ */
+export function probeReactViaServiceWorker(): Promise<boolean> {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: MSG.PROBE_REACT }, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve(false);
+        return;
+      }
+      resolve(response?.isReact === true);
+    });
+  });
 }
 
 function detectStackInner(): TechStack {
@@ -83,8 +100,8 @@ function detectStackInner(): TechStack {
 
   // --- Parent frameworks ---
 
-  // React (check fiber keys on DOM elements)
-  if (hasReactFiber() || document.querySelector('[data-reactroot]')) {
+  // React — DOM-only heuristics that work from isolated world
+  if (probeReactDOM()) {
     return 'react';
   }
 
@@ -114,14 +131,43 @@ function detectStackInner(): TechStack {
   return 'generic';
 }
 
-function hasReactFiber(): boolean {
-  const testEl = document.querySelector('body > *');
-  if (!testEl) return false;
-  return Object.keys(testEl).some((key) => key.startsWith('__reactFiber$'));
+/**
+ * DOM-only heuristics for React detection that work from the isolated world.
+ * No inline scripts needed — checks attributes and asset patterns.
+ */
+function probeReactDOM(): boolean {
+  // 1. [data-reactroot] attribute (classic React)
+  if (document.querySelector('[data-reactroot]')) {
+    return true;
+  }
+
+  // 2. Next.js asset paths (catches Next.js sites even without #__next)
+  if (
+    document.querySelector('script[src*="/_next/"]') ||
+    document.querySelector('link[href*="/_next/"]')
+  ) {
+    return true;
+  }
+
+  // 3. CSS Modules class pattern: ComponentName_class__hash (common in React/Next.js builds)
+  // e.g. HeroSection_hero__top__5T9rA
+  const cssModulesPattern = /^[A-Z][a-zA-Z]+_[a-zA-Z]+__[a-zA-Z0-9]{5,}$/;
+  const sampleElements = document.querySelectorAll('body *[class]');
+  const toCheck = Array.from(sampleElements).slice(0, 100);
+  for (const el of toCheck) {
+    const classes = el.className;
+    if (typeof classes !== 'string') continue;
+    for (const cls of classes.split(/\s+/)) {
+      if (cssModulesPattern.test(cls)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 function hasVueMarkers(): boolean {
-  // Vue scoped styles add data-v-XXXX attributes to elements
   const el = document.querySelector('body > *');
   if (!el) return false;
   const all = [el, ...Array.from(el.querySelectorAll('*')).slice(0, 50)];

@@ -1,17 +1,14 @@
-import type { InspectorMode, InspectorStatus, ExtractionMeta, ReconstructionPayload, ReconstructionProgress, ReconstructionResult, ExtensionSettings } from './types';
+import type { InspectorMode, InspectorStatus, ExtractionMeta } from './types';
 
 export const MSG = {
   ACTIVATE_INSPECTOR: 'ACTIVATE_INSPECTOR',
   DEACTIVATE_INSPECTOR: 'DEACTIVATE_INSPECTOR',
   EXTRACTION_COMPLETE: 'EXTRACTION_COMPLETE',
   STATUS_UPDATE: 'STATUS_UPDATE',
-  RECONSTRUCTION_START: 'RECONSTRUCTION_START',
-  RECONSTRUCTION_PROGRESS: 'RECONSTRUCTION_PROGRESS',
-  RECONSTRUCTION_COMPLETE: 'RECONSTRUCTION_COMPLETE',
-  RECONSTRUCTION_ERROR: 'RECONSTRUCTION_ERROR',
   DETECT_STACK: 'DETECT_STACK',
-  GET_SETTINGS: 'GET_SETTINGS',
-  SAVE_SETTINGS: 'SAVE_SETTINGS',
+  PROBE_REACT: 'PROBE_REACT',
+  COLLECT_FIBER: 'COLLECT_FIBER',
+  COLLECT_GSAP: 'COLLECT_GSAP',
 } as const;
 
 export type ActivateInspectorMsg = {
@@ -34,37 +31,20 @@ export type StatusUpdateMsg = {
   stack?: string;
 };
 
-export type ReconstructionStartMsg = {
-  type: typeof MSG.RECONSTRUCTION_START;
-  payload: ReconstructionPayload;
-};
-
-export type ReconstructionProgressMsg = {
-  type: typeof MSG.RECONSTRUCTION_PROGRESS;
-  progress: ReconstructionProgress;
-};
-
-export type ReconstructionCompleteMsg = {
-  type: typeof MSG.RECONSTRUCTION_COMPLETE;
-  result: ReconstructionResult;
-};
-
-export type ReconstructionErrorMsg = {
-  type: typeof MSG.RECONSTRUCTION_ERROR;
-  error: string;
-};
-
 export type DetectStackMsg = {
   type: typeof MSG.DETECT_STACK;
 };
 
-export type GetSettingsMsg = {
-  type: typeof MSG.GET_SETTINGS;
+export type ProbeReactMsg = {
+  type: typeof MSG.PROBE_REACT;
 };
 
-export type SaveSettingsMsg = {
-  type: typeof MSG.SAVE_SETTINGS;
-  settings: ExtensionSettings;
+export type CollectFiberMsg = {
+  type: typeof MSG.COLLECT_FIBER;
+};
+
+export type CollectGsapMsg = {
+  type: typeof MSG.COLLECT_GSAP;
 };
 
 export type ExtensionMessage =
@@ -73,9 +53,6 @@ export type ExtensionMessage =
   | ExtractionCompleteMsg
   | StatusUpdateMsg
   | DetectStackMsg
-  | ReconstructionStartMsg
-  | ReconstructionProgressMsg
-  | ReconstructionCompleteMsg
-  | ReconstructionErrorMsg
-  | GetSettingsMsg
-  | SaveSettingsMsg;
+  | ProbeReactMsg
+  | CollectFiberMsg
+  | CollectGsapMsg;

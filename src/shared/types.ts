@@ -43,6 +43,118 @@ export interface ExtractionMeta {
 export interface Strategy {
   expandSelection(el: Element): Element;
   cleanup(clone: Element): void;
+  extractAnimations?(el: Element): Partial<AnimationData>;
+}
+
+// --- Animation Types ---
+
+export interface CSSAnimationData {
+  name: string;
+  duration: string;
+  timingFunction: string;
+  delay: string;
+  iterationCount: string;
+  direction: string;
+  fillMode: string;
+  playState: string;
+}
+
+export interface CSSTransitionData {
+  property: string;
+  duration: string;
+  timingFunction: string;
+  delay: string;
+}
+
+export interface KeyframeDefinition {
+  name: string;
+  keyframes: { offset: string; properties: Record<string, string> }[];
+}
+
+export type PseudoState = 'hover' | 'active' | 'focus' | 'focus-within' | 'focus-visible';
+
+export type PseudoStateStyles = Partial<Record<PseudoState, Record<string, string>>>;
+
+export interface ActiveAnimationData {
+  animationName: string;
+  playState: string;
+  timing: {
+    duration: number;
+    delay: number;
+    easing: string;
+    iterations: number;
+    direction: string;
+    fill: string;
+  };
+  keyframes: { offset: number; properties: Record<string, string> }[];
+}
+
+export interface ScrollTriggerData {
+  type: string;
+  description: string;
+}
+
+export interface FramerMotionData {
+  componentName: string;
+  initial?: Record<string, unknown>;
+  animate?: Record<string, unknown>;
+  exit?: Record<string, unknown>;
+  whileHover?: Record<string, unknown>;
+  whileTap?: Record<string, unknown>;
+  whileInView?: Record<string, unknown>;
+  transition?: Record<string, unknown>;
+  variants?: Record<string, unknown>;
+  layoutId?: string;
+  layout?: boolean | string;
+}
+
+export interface WebflowIX2Interaction {
+  trigger: string;
+  animation: Record<string, unknown>;
+}
+
+export interface WebflowIX2Data {
+  elementId: string;
+  interactions: WebflowIX2Interaction[];
+}
+
+export interface GsapScrollTriggerInfo {
+  triggerSelector: string;
+  scroller?: string;
+  start?: string;
+  end?: string;
+  pin?: boolean;
+  scrub?: boolean | number;
+  description?: string;
+}
+
+export interface GsapTweenInfo {
+  targetSelector: string;
+  type: string;
+  properties: Record<string, unknown>;
+  duration?: number;
+  delay?: number;
+  ease?: string;
+}
+
+export interface GsapData {
+  detected: boolean;
+  version?: string;
+  scrollTriggers: GsapScrollTriggerInfo[];
+  tweens: GsapTweenInfo[];
+}
+
+export interface AnimationData {
+  cssAnimations: CSSAnimationData[];
+  cssTransitions: CSSTransitionData[];
+  keyframeDefinitions: KeyframeDefinition[];
+  stateStyles: PseudoStateStyles;
+  activeAnimations: ActiveAnimationData[];
+  scrollTriggers: ScrollTriggerData[];
+  framerMotion: FramerMotionData[];
+  webflowIX2: WebflowIX2Data[];
+  gsap?: GsapData;
+  summary: string;
 }
 
 // --- Fiber / Component Tree Types ---
@@ -82,5 +194,6 @@ export interface ClipboardPayload {
     tag: string;
     tree?: ComponentTree;
     html: string;
+    animations?: AnimationData;
   };
 }

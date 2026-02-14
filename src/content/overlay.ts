@@ -1,8 +1,8 @@
-import type { InspectorMode, TechStack } from '../shared/types';
+import type { InspectorMode, TechStack, ClipboardPayload, StrategyKey, ComponentData, ComponentTree, AnimationData, FramerMotionData, GsapData } from '../shared/types';
 import { REACT_BASED_STACKS } from '../shared/types';
-import { detectStack } from './detector';
-import { extractElement } from './extractor';
-import { collectFiberData } from './fiber-collector';
+import { detectStack, probeReactViaServiceWorker } from './detector';
+import { extractElement, getStrategy } from './extractor';
+import { extractAnimations, mergeAnimationData } from './animation-extractor';
 import { MSG } from '../shared/messages';
 
 let active = false;
@@ -86,36 +86,84 @@ function hideOverlay(): void {
   if (labelEl) labelEl.style.display = 'none';
 }
 
-function setOverlayAmber(): void {
-  if (overlayEl) {
-    overlayEl.style.borderColor = '#f59e0b';
-    overlayEl.style.background = 'rgba(245, 158, 11, 0.1)';
-    overlayEl.style.animation = 'cc-pulse 1.5s ease-in-out infinite';
-  }
-  if (labelEl) {
-    labelEl.style.background = '#f59e0b';
-  }
-}
-
-function setOverlayDefault(): void {
-  if (overlayEl) {
-    overlayEl.style.borderColor = '#3b82f6';
-    overlayEl.style.background = 'rgba(59, 130, 246, 0.1)';
-    overlayEl.style.animation = '';
-  }
-  if (labelEl) {
-    labelEl.style.background = '#3b82f6';
-  }
-}
-
-function setLabelText(text: string): void {
-  if (labelEl) {
-    labelEl.textContent = text;
-  }
-}
-
 function getPageTarget(): Element {
   return document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
+}
+
+function getStrategyKey(stack: TechStack): StrategyKey {
+  if (REACT_BASED_STACKS.has(stack)) return 'react';
+  if (['shopify', 'wordpress', 'webflow', 'framer'].includes(stack)) return stack as StrategyKey;
+  return 'generic';
+}
+
+function buildSelector(el: Element): string {
+  const tag = el.tagName.toLowerCase();
+  const cls = el.className && typeof el.className === 'string'
+    ? '.' + el.className.trim().split(/\s+/).join('.')
+    : '';
+  return `${tag}${cls}`;
+}
+
+/**
+ * Request fiber collection from the service worker (runs in main world).
+ * Marks the target element with data-cc-target, sends COLLECT_FIBER, removes attribute.
+ */
+function collectFiberViaServiceWorker(target: Element): Promise<{
+  components: ComponentData[];
+  rootComponentName: string;
+  motionComponents?: FramerMotionData[];
+} | null> {
+  return new Promise((resolve) => {
+    target.setAttribute('data-cc-target', '1');
+    chrome.runtime.sendMessage({ type: MSG.COLLECT_FIBER }, (response) => {
+      target.removeAttribute('data-cc-target');
+      if (chrome.runtime.lastError) {
+        resolve(null);
+        return;
+      }
+      resolve(response?.data ?? null);
+    });
+  });
+}
+
+/**
+ * Request GSAP animation data from the service worker (runs in main world).
+ */
+function collectGsapViaServiceWorker(): Promise<GsapData | null> {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: MSG.COLLECT_GSAP }, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve(null);
+        return;
+      }
+      resolve(response?.data ?? null);
+    });
+  });
+}
+
+/**
+ * Build a component tree from flat sorted components array.
+ */
+function buildComponentTree(components: ComponentData[], rootName: string): ComponentTree | undefined {
+  if (components.length === 0) return undefined;
+
+  const map = new Map<string, ComponentData>();
+  for (const c of components) map.set(c.displayName, c);
+
+  function build(name: string): ComponentTree | undefined {
+    const data = map.get(name);
+    if (!data) return undefined;
+    return {
+      name: data.displayName,
+      sourceCode: data.sourceCode,
+      instances: data.instances,
+      children: data.children
+        .map(childName => build(childName))
+        .filter((c): c is ComponentTree => c !== undefined),
+    };
+  }
+
+  return build(rootName);
 }
 
 // --- Event handlers ---
@@ -156,28 +204,84 @@ async function onClick(e: MouseEvent): Promise<void> {
     : '';
   console.log('[CC] Click target:', tag + (cls ? '.' + cls : ''));
 
-  // Branch: React-based sites attempt LLM reconstruction
-  if (REACT_BASED_STACKS.has(detectedStack)) {
-    console.log('[CC] Taking React extraction path');
-    await handleReactExtraction(currentTarget);
-  } else {
-    console.log('[CC] Taking HTML extraction path');
-    await handleHtmlExtraction(currentTarget);
-  }
+  await handleExtraction(currentTarget);
 }
 
-async function handleHtmlExtraction(target: Element): Promise<void> {
+async function handleExtraction(target: Element): Promise<void> {
   try {
+    // Always extract HTML (styled)
     const html = extractElement(target, detectedStack);
-    await navigator.clipboard.writeText(html);
-    console.log('[CC] Clipboard copy success, size:', html.length);
+
+    // Extract animations (universal CSS layer)
+    let animations: AnimationData | undefined = extractAnimations(target);
+    console.log('[CC] Animation extraction:', animations ? 'data found' : 'none');
+
+    // Run strategy-specific animation extraction
+    const strategy = getStrategy(detectedStack);
+    if (strategy.extractAnimations) {
+      const strategyAnimations = strategy.extractAnimations(target);
+      animations = mergeAnimationData(animations, strategyAnimations);
+    }
+
+    // Collect GSAP data from main world (works for all stacks)
+    const gsapData = await collectGsapViaServiceWorker();
+    if (gsapData) {
+      console.log('[CC] GSAP data found:', gsapData.version || 'detected',
+        'scrollTriggers:', gsapData.scrollTriggers.length, 'tweens:', gsapData.tweens.length);
+      animations = mergeAnimationData(animations, { gsap: gsapData });
+    }
+
+    // Attempt fiber collection for React-based sites
+    let tree: ComponentTree | undefined;
+    if (REACT_BASED_STACKS.has(detectedStack) || detectedStack === 'framer') {
+      console.log('[CC] Attempting fiber collection via service worker');
+      const fiberData = await collectFiberViaServiceWorker(target);
+      if (fiberData) {
+        console.log('[CC] Fiber data received, components:', fiberData.components.length);
+        tree = buildComponentTree(fiberData.components, fiberData.rootComponentName);
+
+        // Merge Framer Motion data from fiber collection
+        if (fiberData.motionComponents && fiberData.motionComponents.length > 0) {
+          console.log('[CC] Framer Motion data found:', fiberData.motionComponents.length, 'components');
+          animations = mergeAnimationData(animations, {
+            framerMotion: fiberData.motionComponents,
+          });
+        }
+      } else {
+        console.log('[CC] Fiber collection returned null, using HTML only');
+      }
+    }
+
+    // Build clipboard payload
+    const payload: ClipboardPayload = {
+      source: {
+        url: window.location.href,
+        title: document.title,
+        timestamp: new Date().toISOString(),
+      },
+      detection: {
+        framework: detectedStack,
+        strategy: getStrategyKey(detectedStack),
+      },
+      component: {
+        selector: buildSelector(target),
+        tag: target.tagName.toLowerCase(),
+        html,
+        ...(tree ? { tree } : {}),
+        ...(animations ? { animations } : {}),
+      },
+    };
+
+    const payloadStr = JSON.stringify(payload, null, 2);
+    await navigator.clipboard.writeText(payloadStr);
+    console.log('[CC] Clipboard copy success, size:', payloadStr.length);
 
     chrome.runtime.sendMessage({
       type: MSG.EXTRACTION_COMPLETE,
       meta: {
         tag: target.tagName.toLowerCase(),
         stack: detectedStack,
-        size: html.length,
+        size: payloadStr.length,
       },
     });
 
@@ -188,86 +292,6 @@ async function handleHtmlExtraction(target: Element): Promise<void> {
       type: MSG.STATUS_UPDATE,
       status: 'error',
     });
-  }
-}
-
-async function handleReactExtraction(target: Element): Promise<void> {
-  // Attempt to collect fiber data
-  const payload = collectFiberData(target);
-
-  if (!payload) {
-    // Fall back to HTML extraction if fiber collection fails
-    await handleHtmlExtraction(target);
-    return;
-  }
-
-  // Show reconstructing state
-  chrome.runtime.sendMessage({
-    type: MSG.STATUS_UPDATE,
-    status: 'reconstructing',
-  });
-  setOverlayAmber();
-  setLabelText('Reconstructing...');
-
-  // Disable mouse tracking while reconstructing
-  document.removeEventListener('mousemove', onMouseMove, true);
-
-  try {
-    // Open port to service worker for long-running reconstruction
-    const port = chrome.runtime.connect({ name: 'reconstruction' });
-
-    const result = await new Promise<{ success: boolean; code: string; error?: string }>((resolve) => {
-      port.onMessage.addListener((msg) => {
-        if (msg.type === MSG.RECONSTRUCTION_PROGRESS) {
-          const p = msg.progress;
-          setLabelText(`${p.componentName} (${p.current}/${p.total}) — ${p.phase}`);
-        } else if (msg.type === MSG.RECONSTRUCTION_COMPLETE) {
-          resolve({ success: true, code: msg.result.code });
-          port.disconnect();
-        } else if (msg.type === MSG.RECONSTRUCTION_ERROR) {
-          resolve({ success: false, code: '', error: msg.error });
-          port.disconnect();
-        }
-      });
-
-      port.postMessage({
-        type: MSG.RECONSTRUCTION_START,
-        payload,
-      });
-    });
-
-    console.log('[CC] Reconstruction result received, success:', result.success);
-    if (result.success && result.code) {
-      await navigator.clipboard.writeText(result.code);
-      console.log('[CC] Clipboard copy success, size:', result.code.length);
-
-      chrome.runtime.sendMessage({
-        type: MSG.EXTRACTION_COMPLETE,
-        meta: {
-          tag: target.tagName.toLowerCase(),
-          stack: detectedStack,
-          size: result.code.length,
-        },
-      });
-
-      flashGreen();
-    } else {
-      // Reconstruction failed — fall back to HTML extraction
-      console.warn('[Component Copier] Reconstruction failed:', result.error);
-      setOverlayDefault();
-      await handleHtmlExtraction(target);
-    }
-  } catch (err) {
-    console.error('[Component Copier] Reconstruction error:', err);
-    // Fall back to HTML
-    setOverlayDefault();
-    await handleHtmlExtraction(target);
-  } finally {
-    // Re-enable mouse tracking
-    setOverlayDefault();
-    if (active) {
-      document.addEventListener('mousemove', onMouseMove, true);
-    }
   }
 }
 
@@ -328,7 +352,7 @@ function onKeyDown(e: KeyboardEvent): void {
 
 // --- Public API ---
 
-export function activate(newMode: InspectorMode): void {
+export async function activate(newMode: InspectorMode): Promise<void> {
   console.log('[CC] Overlay activate, mode:', newMode);
   if (active) deactivate();
 
@@ -345,6 +369,15 @@ export function activate(newMode: InspectorMode): void {
   if (mode === 'page') {
     currentTarget = getPageTarget();
     updateOverlay(currentTarget);
+  }
+
+  // If initial detection was generic, try async React confirmation via main world
+  if (detectedStack === 'generic') {
+    const isReact = await probeReactViaServiceWorker();
+    if (isReact) {
+      console.log('[CC] Async React probe confirmed React — upgrading stack');
+      detectedStack = 'react';
+    }
   }
 
   chrome.runtime.sendMessage({

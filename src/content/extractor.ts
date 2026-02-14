@@ -25,6 +25,11 @@ const VISUAL_PROPERTIES = [
   'justify-content', 'align-items', 'align-self', 'gap',
   'grid-template-columns', 'grid-template-rows', 'grid-column', 'grid-row',
   'transform', 'transition', 'box-sizing', 'object-fit',
+  'animation-name', 'animation-duration', 'animation-timing-function',
+  'animation-delay', 'animation-iteration-count', 'animation-direction',
+  'animation-fill-mode', 'animation-play-state',
+  'transition-property', 'transition-duration', 'transition-timing-function', 'transition-delay',
+  'will-change',
 ];
 
 const strategies: Record<StrategyKey, Strategy> = {
@@ -68,12 +73,7 @@ export function extractElement(element: Element, stack: TechStack): string {
   const html = clone.outerHTML;
   console.log('[CC] Final HTML size:', html.length);
 
-  // Wrap in full HTML document
-  return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-<body>${clone.outerHTML}</body>
-</html>`;
+  return html;
 }
 
 // Cache of default computed styles per tag name, so we only create one

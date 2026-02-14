@@ -1,4 +1,4 @@
-import type { Strategy } from '../../shared/types';
+import type { Strategy, AnimationData } from '../../shared/types';
 
 export const framerStrategy: Strategy = {
   expandSelection(el: Element): Element {
@@ -15,5 +15,11 @@ export const framerStrategy: Strategy = {
         }
       }
     }
+  },
+  extractAnimations(_el: Element): Partial<AnimationData> {
+    // Framer Motion data is extracted from the React fiber tree
+    // via collectFiberInMainWorld in the service worker.
+    // This shell exists so the strategy interface is satisfied.
+    return {};
   },
 };
