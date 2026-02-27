@@ -1,4 +1,4 @@
-import type { InspectorMode, TechStack, ClipboardPayload, StrategyKey, ComponentData, ComponentTree, AnimationData, FramerMotionData, GsapData, DomMutationRecording, SemanticHint, InteractionPattern, ModuleDependency } from '../shared/types';
+import type { InspectorMode, TechStack, ClipboardPayload, StrategyKey, ComponentData, ComponentTree, AnimationData, FramerMotionData, GsapData, DomMutationRecording, SemanticHint, InteractionPattern, ModuleDependency, ElementFingerprint } from '../shared/types';
 import { REACT_BASED_STACKS } from '../shared/types';
 import { detectStack, probeReactViaServiceWorker } from './detector';
 import { extractElement, getStrategy } from './extractor';
@@ -6,6 +6,7 @@ import { extractAnimations, mergeAnimationData } from './animation-extractor';
 import { extractFonts } from './font-extractor';
 import { recordMutations } from './mutation-recorder';
 import { MSG } from '../shared/messages';
+import { startFullCapture, continueCapture } from './capture-orchestrator';
 
 let active = false;
 let mode: InspectorMode = 'component';
@@ -661,21 +662,14 @@ async function handleExtraction(target: Element): Promise<void> {
       },
     };
 
-    const payloadStr = JSON.stringify(payload, null, 2);
-    await navigator.clipboard.writeText(payloadStr);
-    console.log('[Pablo] Clipboard copy success, size:', payloadStr.length);
-
-    chrome.runtime.sendMessage({
-      type: MSG.EXTRACTION_COMPLETE,
-      meta: {
-        tag: target.tagName.toLowerCase(),
-        stack: detectedStack,
-        size: payloadStr.length,
-      },
-    });
-
+    // Start the full animation capture pipeline (refresh + entrance + scroll + interaction)
     hideExtracting();
-    flashGreen();
+    showCaptureProgress('Starting animation capture…');
+
+    startFullCapture(target, payload, (phase) => {
+      updateCapturePhase(phase);
+    });
+    // The page will now refresh. continueCapture will be called after refresh via handleContinueCapture.
   } catch (err) {
     hideExtracting();
     if (labelEl) {
@@ -700,6 +694,85 @@ async function handleExtraction(target: Element): Promise<void> {
       status: 'error',
     });
   }
+}
+
+// --- Capture Progress UI (shown after page refresh) ---
+
+let captureHostEl: HTMLDivElement | null = null;
+let captureStatusEl: HTMLSpanElement | null = null;
+
+function showCaptureProgress(phase: string): void {
+  if (captureHostEl) return;
+
+  captureHostEl = document.createElement('div');
+  captureHostEl.id = '__pablo-capture-host';
+  const shadow = captureHostEl.attachShadow({ mode: 'closed' });
+
+  const container = document.createElement('div');
+  container.style.cssText = `
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 2147483647;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.85);
+    color: white;
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, sans-serif;
+    padding: 10px 16px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    white-space: nowrap;
+  `;
+
+  const style = document.createElement('style');
+  style.textContent = `@keyframes __pablo-spin { to { transform: rotate(360deg); } }`;
+
+  container.innerHTML = `
+    <svg width="16" height="16" viewBox="0 0 14 14" style="animation: __pablo-spin 0.8s linear infinite; flex-shrink: 0;">
+      <circle cx="7" cy="7" r="5.5" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+      <path d="M7 1.5 A5.5 5.5 0 0 1 12.5 7" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <span id="__pablo-capture-status">${phase}</span>
+  `;
+
+  shadow.appendChild(style);
+  shadow.appendChild(container);
+  document.documentElement.appendChild(captureHostEl);
+  captureStatusEl = shadow.getElementById('__pablo-capture-status') as HTMLSpanElement;
+}
+
+function updateCapturePhase(phase: string): void {
+  if (captureStatusEl) {
+    captureStatusEl.textContent = phase;
+  }
+
+  if (phase === 'Copied!' || phase.startsWith('Error')) {
+    setTimeout(destroyCaptureProgress, 2000);
+  }
+}
+
+function destroyCaptureProgress(): void {
+  if (captureHostEl) {
+    captureHostEl.remove();
+    captureHostEl = null;
+    captureStatusEl = null;
+  }
+}
+
+/**
+ * Entry point for post-refresh animation capture.
+ * Called by index.ts when CONTINUE_CAPTURE message is received.
+ */
+export async function handleContinueCapture(
+  fingerprint: ElementFingerprint,
+  immediatePayload: ClipboardPayload,
+): Promise<void> {
+  showCaptureProgress('Continuing capture…');
+  await continueCapture(fingerprint, immediatePayload, (phase) => {
+    updateCapturePhase(phase);
+  });
 }
 
 function flashGreen(): void {

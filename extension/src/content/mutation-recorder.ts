@@ -1,5 +1,102 @@
 import type { DomMutationRecord, DomMutationRecording } from '../shared/types';
 
+// --- Mutation Compression ---
+
+const CSS_VAR_PATTERN = /--[\w-]+:\s*-?[\d.]+/;
+const MOUSE_VAR_PATTERN = /--(?:card-)?mouse-?[xy]|--mouse-?(?:pos|position)/i;
+
+/**
+ * Compress a list of DOM mutations to reduce payload size.
+ * - Groups CSS variable animation mutations into single summaries
+ * - Detects mouse-tracking CSS variables and summarizes them
+ * - For other repeated mutation groups, keeps only first and last
+ */
+export function compressMutations(mutations: DomMutationRecord[]): DomMutationRecord[] {
+  if (mutations.length <= 3) return mutations;
+
+  // Group by target + type
+  const groups = new Map<string, DomMutationRecord[]>();
+  for (const m of mutations) {
+    const key = `${m.target}::${m.type}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = [];
+      groups.set(key, group);
+    }
+    group.push(m);
+  }
+
+  const result: DomMutationRecord[] = [];
+
+  for (const [_key, group] of groups) {
+    if (group.length <= 2) {
+      result.push(...group);
+      continue;
+    }
+
+    // Check for mouse-tracking CSS variables
+    if (group[0].type === 'style' && group.some(m => {
+      const val = m.changes.new || m.changes.old || '';
+      return MOUSE_VAR_PATTERN.test(val);
+    })) {
+      result.push({
+        timestamp: group[0].timestamp,
+        type: 'style',
+        target: group[0].target,
+        changes: { summary: 'Mouse position tracking via CSS variables' },
+      });
+      continue;
+    }
+
+    // Check for CSS variable animation patterns
+    if (group[0].type === 'style' && group.every(m => {
+      const val = m.changes.new || '';
+      return CSS_VAR_PATTERN.test(val);
+    })) {
+      // Extract variable names and value ranges
+      const varRanges = new Map<string, { min: number; max: number; count: number }>();
+      for (const m of group) {
+        const matches = (m.changes.new || '').matchAll(/(-{2}[\w-]+):\s*(-?[\d.]+)/g);
+        for (const match of matches) {
+          const varName = match[1];
+          const val = parseFloat(match[2]);
+          const range = varRanges.get(varName);
+          if (range) {
+            range.min = Math.min(range.min, val);
+            range.max = Math.max(range.max, val);
+            range.count++;
+          } else {
+            varRanges.set(varName, { min: val, max: val, count: 1 });
+          }
+        }
+      }
+
+      const duration = group[group.length - 1].timestamp - group[0].timestamp;
+      const changes: Record<string, string> = { summary: 'CSS variable animation' };
+      for (const [varName, range] of varRanges) {
+        changes[varName] = `${round(range.min)} -> ${round(range.max)} (${range.count} steps over ${duration}ms)`;
+      }
+
+      result.push({
+        timestamp: group[0].timestamp,
+        type: 'style',
+        target: group[0].target,
+        changes,
+      });
+      continue;
+    }
+
+    // For other groups with 3+ entries, keep first and last
+    result.push(group[0], group[group.length - 1]);
+  }
+
+  return result;
+}
+
+function round(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+}
+
 const MAX_MUTATIONS = 200;
 const TRACKED_ATTRIBUTES = new Set(['style', 'class', 'data-state', 'aria-hidden']);
 
@@ -135,7 +232,7 @@ export function recordMutations(
       } else {
         resolve({
           duration: durationMs,
-          mutations,
+          mutations: compressMutations(mutations),
         });
       }
     }, durationMs);

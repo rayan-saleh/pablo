@@ -128,20 +128,166 @@ const VISUAL_PROPERTIES = [
   'animation-delay', 'animation-iteration-count', 'animation-direction',
   'animation-fill-mode', 'animation-play-state',
   'transition-property', 'transition-duration', 'transition-timing-function', 'transition-delay',
-  'will-change',
 ];
 
 // Values that are always defaults regardless of element context
 const ALWAYS_DEFAULT = new Map<string, string>([
   ['min-width', 'auto'],
   ['min-height', 'auto'],
-  ['will-change', 'auto'],
   ['opacity', '1'],
+  ['max-width', 'none'],
+  ['max-height', 'none'],
+  ['visibility', 'visible'],
+  ['text-transform', 'none'],
+  ['letter-spacing', 'normal'],
+  ['white-space', 'normal'],
+  ['object-fit', 'fill'],
+  ['background-repeat', 'repeat'],
+  ['background-size', 'auto'],
+  ['background-position', '0% 0%'],
+  ['background-image', 'none'],
 ]);
 
-function isIdentityTransform(value: string): boolean {
+/**
+ * Simplify CSS transform matrix() into human-readable functions.
+ * Returns null if the transform is identity (should be omitted).
+ */
+function simplifyTransform(value: string): string | null {
   const n = value.replace(/\s/g, '');
-  return n === 'matrix(1,0,0,1,0,0)' || n === 'matrix3d(1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1)';
+  if (n === 'matrix(1,0,0,1,0,0)' || n === 'matrix3d(1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1)') {
+    return null; // identity
+  }
+  const m = n.match(/^matrix\(([^)]+)\)$/);
+  if (!m) return value; // not a simple matrix(), keep as-is
+  const parts = m[1].split(',').map(Number);
+  if (parts.length !== 6 || parts.some(isNaN)) return value;
+  const [a, b, c, d, tx, ty] = parts;
+  const isRotatedOrSkewed = b !== 0 || c !== 0;
+  if (isRotatedOrSkewed) return value; // complex transform, keep matrix
+
+  const funcs: string[] = [];
+  if (tx !== 0 || ty !== 0) {
+    if (ty === 0) funcs.push(`translateX(${round1(tx)}px)`);
+    else if (tx === 0) funcs.push(`translateY(${round1(ty)}px)`);
+    else funcs.push(`translate(${round1(tx)}px, ${round1(ty)}px)`);
+  }
+  if (a !== 1 || d !== 1) {
+    if (a === d) funcs.push(`scale(${round3(a)})`);
+    else if (d === 1) funcs.push(`scaleX(${round3(a)})`);
+    else if (a === 1) funcs.push(`scaleY(${round3(d)})`);
+    else funcs.push(`scale(${round3(a)}, ${round3(d)})`);
+  }
+  if (funcs.length === 0) return null; // identity
+  return funcs.join(' ');
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+function round3(n: number): number {
+  return Math.round(n * 1000) / 1000;
+}
+
+/**
+ * Round sub-pixel CSS values to 1 decimal place.
+ * e.g. "12.3456px" → "12.3px", "0.00px" → "0px"
+ */
+function roundCSSValue(value: string): string {
+  return value.replace(/(-?\d+\.\d{2,})(px|%|em|rem|vw|vh|vmin|vmax)/g, (_match, num, unit) => {
+    const rounded = Math.round(parseFloat(num) * 10) / 10;
+    // Drop trailing .0 → "12.0px" becomes "12px"
+    const str = rounded === Math.trunc(rounded) ? String(Math.trunc(rounded)) : String(rounded);
+    return str + unit;
+  });
+}
+
+/**
+ * Remove all border-related properties when all 4 sides are invisible
+ * (width: 0px or style: none).
+ */
+function removeInvisibleBorders(styles: Map<string, string>): void {
+  const allInvisible = ['top', 'right', 'bottom', 'left'].every(side => {
+    const w = styles.get(`border-${side}-width`);
+    const s = styles.get(`border-${side}-style`);
+    return w === '0px' || s === 'none';
+  });
+  if (!allInvisible) return;
+  for (const side of ['top', 'right', 'bottom', 'left']) {
+    styles.delete(`border-${side}-width`);
+    styles.delete(`border-${side}-style`);
+    styles.delete(`border-${side}-color`);
+  }
+}
+
+/**
+ * Collapse transition-* longhands into the transition shorthand.
+ */
+function collapseTransitionShorthand(styles: Map<string, string>): void {
+  const prop = styles.get('transition-property');
+  const dur = styles.get('transition-duration');
+  const timing = styles.get('transition-timing-function');
+  const delay = styles.get('transition-delay');
+  if (!prop || !dur) return;
+
+  // All must be present (or we skip timing/delay if they're defaults)
+  const parts = [prop, dur];
+  if (timing && timing !== 'ease') parts.push(timing);
+  if (delay && delay !== '0s') parts.push(delay);
+
+  styles.delete('transition-property');
+  styles.delete('transition-duration');
+  styles.delete('transition-timing-function');
+  styles.delete('transition-delay');
+  styles.set('transition', parts.join(' '));
+}
+
+/**
+ * Collapse animation-* longhands into the animation shorthand.
+ */
+function collapseAnimationShorthand(styles: Map<string, string>): void {
+  const name = styles.get('animation-name');
+  const dur = styles.get('animation-duration');
+  if (!name || name === 'none' || !dur) return;
+
+  const timing = styles.get('animation-timing-function');
+  const delay = styles.get('animation-delay');
+  const iterations = styles.get('animation-iteration-count');
+  const direction = styles.get('animation-direction');
+  const fill = styles.get('animation-fill-mode');
+  const playState = styles.get('animation-play-state');
+
+  // Build shorthand: duration | timing | delay | iterations | direction | fill | playState | name
+  const parts = [dur];
+  if (timing && timing !== 'ease') parts.push(timing);
+  if (delay && delay !== '0s') parts.push(delay);
+  if (iterations && iterations !== '1') parts.push(iterations);
+  if (direction && direction !== 'normal') parts.push(direction);
+  if (fill && fill !== 'none') parts.push(fill);
+  if (playState && playState !== 'running') parts.push(playState);
+  parts.push(name);
+
+  for (const p of [
+    'animation-name', 'animation-duration', 'animation-timing-function',
+    'animation-delay', 'animation-iteration-count', 'animation-direction',
+    'animation-fill-mode', 'animation-play-state',
+  ]) {
+    styles.delete(p);
+  }
+  styles.set('animation', parts.join(' '));
+}
+
+/**
+ * When position is absolute/fixed and all 4 edges are set,
+ * width/height are derived and can be removed.
+ */
+function removeRedundantDimensions(styles: Map<string, string>): void {
+  const pos = styles.get('position');
+  if (pos !== 'absolute' && pos !== 'fixed') return;
+  const hasAll4 = styles.has('top') && styles.has('right') && styles.has('bottom') && styles.has('left');
+  if (!hasAll4) return;
+  styles.delete('width');
+  styles.delete('height');
 }
 
 function removeInvisibleBorderColors(styles: Map<string, string>): void {
@@ -204,8 +350,12 @@ function collapseShorthands(styles: Map<string, string>): void {
 }
 
 function postProcessStyles(styles: Map<string, string>): void {
+  removeInvisibleBorders(styles);
   removeInvisibleBorderColors(styles);
   removeRedundantOverflow(styles);
+  removeRedundantDimensions(styles);
+  collapseTransitionShorthand(styles);
+  collapseAnimationShorthand(styles);
   collapseShorthands(styles);
 }
 
@@ -251,6 +401,9 @@ export function extractElement(element: Element, stack: TechStack): string {
 
   // Merge consecutive identical-style spans (e.g. per-character Framer spans)
   mergeAdjacentSpans(clone);
+
+  // Collapse 4+ consecutive identical siblings into 2 + comment + last
+  deduplicateRepeatedSiblings(clone);
 
   const html = formatHtml(clone.outerHTML);
   console.log('[Pablo] Final HTML size:', html.length);
@@ -333,13 +486,18 @@ function applyComputedStyles(original: Element, clone: Element, frameworkDefault
       // Skip z-index on statically positioned elements (it has no effect)
       if (position === 'static' && prop === 'z-index') continue;
 
-      // Skip identity transforms
-      if (prop === 'transform' && isIdentityTransform(value)) continue;
+      // Simplify transforms — skip identity, convert matrix to readable form
+      if (prop === 'transform') {
+        const simplified = simplifyTransform(value);
+        if (simplified === null) continue; // identity
+        styles.set(prop, simplified);
+        continue;
+      }
 
       // cursor:pointer is the browser default on clickable elements
       if (prop === 'cursor' && value === 'pointer' && isClickable) continue;
 
-      styles.set(prop, value);
+      styles.set(prop, roundCSSValue(value));
     }
 
     // Filter framework defaults (e.g. Framer runtime noise)
@@ -510,6 +668,64 @@ function mergeAdjacentSpans(root: Element): void {
     // Re-read children since DOM changed
     children.length = 0;
     children.push(...Array.from(root.childNodes));
+  }
+}
+
+/**
+ * Fingerprint an element's structure: tag + sorted child tag names + sorted attr names.
+ */
+function elementStructureKey(el: Element): string {
+  const childTags = Array.from(el.children).map(c => c.tagName).join(',');
+  const attrs = Array.from(el.attributes).map(a => a.name).sort().join(',');
+  return `${el.tagName}|${childTags}|${attrs}`;
+}
+
+/**
+ * When 4+ consecutive siblings have identical structure, keep first 2 + last 1
+ * and insert a comment summarizing the omitted elements.
+ */
+function deduplicateRepeatedSiblings(root: Element): void {
+  // Process children first (depth-first)
+  for (const child of Array.from(root.children)) {
+    deduplicateRepeatedSiblings(child);
+  }
+
+  const children = Array.from(root.children);
+  let i = 0;
+
+  while (i < children.length) {
+    const key = elementStructureKey(children[i]);
+    let j = i + 1;
+    while (j < children.length && elementStructureKey(children[j]) === key) {
+      j++;
+    }
+    const runLength = j - i;
+
+    if (runLength >= 4) {
+      const tag = children[i].tagName.toLowerCase();
+      const keep1 = children[i];     // first
+      const keep2 = children[i + 1]; // second
+      const keepLast = children[j - 1]; // last
+      const omitted = runLength - 3;
+
+      // Remove elements between keep2 and keepLast
+      for (let k = i + 2; k < j - 1; k++) {
+        children[k].remove();
+      }
+
+      // Insert comment after keep2
+      const comment = document.createComment(
+        ` ...${omitted} more identical ${tag} elements (${runLength} total) `
+      );
+      keep2.after(comment);
+
+      // Re-read children since DOM changed
+      children.length = 0;
+      children.push(...Array.from(root.children));
+      i = Array.from(root.children).indexOf(keepLast) + 1;
+    } else {
+      i = j;
+    }
   }
 }
 

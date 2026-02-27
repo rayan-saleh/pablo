@@ -1,4 +1,4 @@
-import type { InspectorMode, InspectorStatus, ExtractionMeta } from './types';
+import type { InspectorMode, InspectorStatus, ExtractionMeta, ElementFingerprint, ClipboardPayload } from './types';
 
 export const MSG = {
   ACTIVATE_INSPECTOR: 'ACTIVATE_INSPECTOR',
@@ -11,6 +11,12 @@ export const MSG = {
   COLLECT_GSAP: 'COLLECT_GSAP',
   COLLECT_MODULES: 'COLLECT_MODULES',
   COLLECT_DOM_MUTATIONS: 'COLLECT_DOM_MUTATIONS',
+  START_ANIMATION_CAPTURE: 'START_ANIMATION_CAPTURE',
+  CONTENT_SCRIPT_READY: 'CONTENT_SCRIPT_READY',
+  CONTINUE_CAPTURE: 'CONTINUE_CAPTURE',
+  CAPTURE_PHASE_UPDATE: 'CAPTURE_PHASE_UPDATE',
+  COLLECT_ENTRANCE_ANIMATIONS: 'COLLECT_ENTRANCE_ANIMATIONS',
+  COLLECT_INTERSECTION_DATA: 'COLLECT_INTERSECTION_DATA',
 } as const;
 
 export type ActivateInspectorMsg = {
@@ -57,6 +63,36 @@ export type CollectDomMutationsMsg = {
   type: typeof MSG.COLLECT_DOM_MUTATIONS;
 };
 
+export type StartAnimationCaptureMsg = {
+  type: typeof MSG.START_ANIMATION_CAPTURE;
+  fingerprint: ElementFingerprint;
+  immediatePayload: ClipboardPayload;
+  url: string;
+};
+
+export type ContentScriptReadyMsg = {
+  type: typeof MSG.CONTENT_SCRIPT_READY;
+};
+
+export type ContinueCaptureMsg = {
+  type: typeof MSG.CONTINUE_CAPTURE;
+  fingerprint: ElementFingerprint;
+  immediatePayload: ClipboardPayload;
+};
+
+export type CapturePhaseUpdateMsg = {
+  type: typeof MSG.CAPTURE_PHASE_UPDATE;
+  phase: string;
+};
+
+export type CollectEntranceAnimationsMsg = {
+  type: typeof MSG.COLLECT_ENTRANCE_ANIMATIONS;
+};
+
+export type CollectIntersectionDataMsg = {
+  type: typeof MSG.COLLECT_INTERSECTION_DATA;
+};
+
 export type ExtensionMessage =
   | ActivateInspectorMsg
   | DeactivateInspectorMsg
@@ -67,4 +103,10 @@ export type ExtensionMessage =
   | CollectFiberMsg
   | CollectGsapMsg
   | CollectModulesMsg
-  | CollectDomMutationsMsg;
+  | CollectDomMutationsMsg
+  | StartAnimationCaptureMsg
+  | ContentScriptReadyMsg
+  | ContinueCaptureMsg
+  | CapturePhaseUpdateMsg
+  | CollectEntranceAnimationsMsg
+  | CollectIntersectionDataMsg;

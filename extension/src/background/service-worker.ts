@@ -1,4 +1,40 @@
 import { MSG, type ExtensionMessage } from '../shared/messages';
+import type { ElementFingerprint, ClipboardPayload } from '../shared/types';
+
+// --- Pending capture state (persisted to session storage for SW sleep safety) ---
+
+interface PendingCapture {
+  tabId: number;
+  url: string;
+  fingerprint: ElementFingerprint;
+  immediatePayload: ClipboardPayload;
+  startedAt: number;
+}
+
+let pendingCapture: PendingCapture | null = null;
+
+async function savePendingCapture(capture: PendingCapture | null): Promise<void> {
+  pendingCapture = capture;
+  try {
+    if (capture) {
+      await chrome.storage.session.set({ __pablo_pending_capture: capture });
+    } else {
+      await chrome.storage.session.remove('__pablo_pending_capture');
+    }
+  } catch { /* session storage may not be available */ }
+}
+
+async function loadPendingCapture(): Promise<PendingCapture | null> {
+  if (pendingCapture) return pendingCapture;
+  try {
+    const result = await chrome.storage.session.get('__pablo_pending_capture');
+    if (result.__pablo_pending_capture) {
+      pendingCapture = result.__pablo_pending_capture;
+      return pendingCapture;
+    }
+  } catch { /* */ }
+  return null;
+}
 
 // --- Early GSAP recorder injection ---
 
@@ -391,6 +427,167 @@ function collectDomMutationsInMainWorld(): any {
 }
 
 /**
+ * Enhanced Web Animations API recorder that snapshots active animations
+ * every 100ms for the first 5 seconds after page load.
+ * Used to capture entrance animations that may complete before user interaction.
+ * Injected into MAIN world at document_start when a capture is pending.
+ */
+function installEnhancedAnimationRecorderInMainWorld(): void {
+  const w = window as any;
+  if (w.__pablo_enhanced_anim_installed) return;
+  w.__pablo_enhanced_anim_installed = true;
+
+  const snapshots: any[] = [];
+  w.__pablo_anim_snapshots = snapshots;
+  const MAX_SNAPSHOTS = 200;
+  const t0 = performance.now();
+
+  function captureSnapshot() {
+    if (snapshots.length >= MAX_SNAPSHOTS) return;
+    try {
+      const animations = document.getAnimations();
+      for (const anim of animations) {
+        if (snapshots.length >= MAX_SNAPSHOTS) break;
+        const effect = anim.effect;
+        if (!effect) continue;
+        const timing = effect.getTiming();
+        const target = (effect as any).target;
+        if (!target || !(target instanceof Element)) continue;
+
+        let targetSelector = target.tagName.toLowerCase();
+        if (target.id) targetSelector = `${targetSelector}#${target.id}`;
+        else if (target.className && typeof target.className === 'string') {
+          targetSelector += '.' + target.className.trim().split(/\s+/).slice(0, 2).join('.');
+        }
+
+        const keyframes: any[] = [];
+        if ('getKeyframes' in effect) {
+          for (const kf of (effect as KeyframeEffect).getKeyframes()) {
+            const props: Record<string, string> = {};
+            for (const [key, value] of Object.entries(kf)) {
+              if (key === 'offset' || key === 'computedOffset' || key === 'easing' || key === 'composite') continue;
+              if (typeof value === 'string') props[key] = value;
+            }
+            keyframes.push({ offset: kf.offset ?? kf.computedOffset ?? 0, properties: props });
+          }
+        }
+
+        let animationName = 'web-animation';
+        if (anim instanceof CSSAnimation) animationName = anim.animationName;
+        else if (anim instanceof CSSTransition) animationName = `transition:${anim.transitionProperty}`;
+
+        snapshots.push({
+          timestamp: Math.round(performance.now() - t0),
+          targetSelector,
+          animationName,
+          playState: anim.playState,
+          timing: {
+            duration: typeof timing.duration === 'number' ? timing.duration : 0,
+            delay: timing.delay ?? 0,
+            easing: (timing.easing as string) ?? 'linear',
+            iterations: timing.iterations ?? 1,
+            direction: (timing.direction as string) ?? 'normal',
+            fill: (timing.fill as string) ?? 'none',
+          },
+          keyframes,
+        });
+      }
+    } catch { /* */ }
+  }
+
+  // Poll every 100ms for 5 seconds
+  const interval = setInterval(captureSnapshot, 100);
+  setTimeout(() => clearInterval(interval), 5000);
+  // Also capture immediately
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', captureSnapshot);
+  } else {
+    captureSnapshot();
+  }
+}
+
+/**
+ * Wraps IntersectionObserver constructor to log when callbacks fire.
+ * Used to detect scroll-triggered animations on the target element.
+ * Injected into MAIN world at document_start when a capture is pending.
+ */
+function installIntersectionObserverHookInMainWorld(): void {
+  const w = window as any;
+  if (w.__pablo_io_hook_installed) return;
+  w.__pablo_io_hook_installed = true;
+
+  const log: any[] = [];
+  w.__pablo_io_log = log;
+  const MAX_LOG = 50;
+  const OrigIO = window.IntersectionObserver;
+
+  w.IntersectionObserver = function(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+    const wrappedCallback: IntersectionObserverCallback = (entries, observer) => {
+      for (const entry of entries) {
+        if (log.length >= MAX_LOG) break;
+        const target = entry.target;
+        let selector = target.tagName.toLowerCase();
+        if (target.id) selector = `${selector}#${target.id}`;
+        else if (target.className && typeof target.className === 'string') {
+          selector += '.' + target.className.trim().split(/\s+/).slice(0, 2).join('.');
+        }
+        log.push({
+          timestamp: Math.round(performance.now()),
+          selector,
+          isIntersecting: entry.isIntersecting,
+          intersectionRatio: entry.intersectionRatio,
+        });
+      }
+      return callback(entries, observer);
+    };
+    return new OrigIO(wrappedCallback, options);
+  } as any;
+  // Copy static properties
+  w.IntersectionObserver.prototype = OrigIO.prototype;
+}
+
+/**
+ * Collects entrance animation snapshots recorded by the enhanced recorder,
+ * optionally scoped to a target element's subtree.
+ * Runs in the page's main world via chrome.scripting.executeScript.
+ */
+function collectEntranceAnimationsInMainWorld(): any[] | null {
+  const w = window as any;
+  const snapshots = w.__pablo_anim_snapshots;
+  if (!snapshots || snapshots.length === 0) return null;
+
+  // Find target scope
+  const scope = document.querySelector('[data-pablo-entrance-target]');
+  if (scope) scope.removeAttribute('data-pablo-entrance-target');
+
+  if (!scope) return snapshots.slice(0, 100);
+
+  // Filter snapshots to target subtree
+  function matchesScope(selector: string): boolean {
+    try {
+      const els = document.querySelectorAll(selector.split('.')[0] || '*');
+      for (const el of Array.from(els)) {
+        if (scope!.contains(el) || scope === el) return true;
+      }
+    } catch { /* */ }
+    return false;
+  }
+
+  return snapshots.filter((s: any) => matchesScope(s.targetSelector)).slice(0, 100);
+}
+
+/**
+ * Collects IntersectionObserver callback logs.
+ * Runs in the page's main world via chrome.scripting.executeScript.
+ */
+function collectIntersectionDataInMainWorld(): any[] | null {
+  const w = window as any;
+  const log = w.__pablo_io_log;
+  if (!log || log.length === 0) return null;
+  return log.slice(0, 50);
+}
+
+/**
  * Hooks webpack's module system to record module factory source code.
  * Captures __webpack_modules__ and intercepts webpackChunk[].push for late-loaded chunks.
  * Injected into MAIN world at document_start alongside the GSAP recorder.
@@ -562,7 +759,7 @@ function resolveComponentModulesInMainWorld(): {
 }
 
 // Inject the GSAP recorder into every page at navigation commit (before page scripts run)
-chrome.webNavigation.onCommitted.addListener((details) => {
+chrome.webNavigation.onCommitted.addListener(async (details) => {
   if (details.frameId !== 0) return;
   const url = details.url;
   if (url.startsWith('chrome://') || url.startsWith('about:') ||
@@ -590,6 +787,21 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   }).catch(() => {
     // Silently fail for restricted pages
   });
+
+  // If there's a pending capture for this tab, inject enhanced recorders
+  const pending = await loadPendingCapture();
+  if (pending && pending.tabId === details.tabId) {
+    chrome.scripting.executeScript({
+      target: { tabId: details.tabId },
+      world: 'MAIN',
+      func: installEnhancedAnimationRecorderInMainWorld,
+    }).catch(() => { /* */ });
+    chrome.scripting.executeScript({
+      target: { tabId: details.tabId },
+      world: 'MAIN',
+      func: installIntersectionObserverHookInMainWorld,
+    }).catch(() => { /* */ });
+  }
 });
 
 // --- Main-world functions (self-contained, no closures) ---
@@ -1402,6 +1614,110 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
         target: { tabId },
         world: 'MAIN',
         func: collectDomMutationsInMainWorld,
+      }).then((results) => {
+        sendResponse({ data: results?.[0]?.result ?? null });
+      }).catch(() => {
+        sendResponse({ data: null });
+      });
+      return true;
+    }
+
+    case MSG.START_ANIMATION_CAPTURE: {
+      const tabId = sender.tab?.id;
+      if (!tabId) {
+        sendResponse({ ok: false });
+        return true;
+      }
+      const msg = message as any;
+      const capture: PendingCapture = {
+        tabId,
+        url: msg.url,
+        fingerprint: msg.fingerprint,
+        immediatePayload: msg.immediatePayload,
+        startedAt: Date.now(),
+      };
+      savePendingCapture(capture).then(() => {
+        chrome.tabs.reload(tabId).then(() => {
+          sendResponse({ ok: true });
+        }).catch(() => {
+          savePendingCapture(null);
+          sendResponse({ ok: false });
+        });
+      });
+      return true;
+    }
+
+    case MSG.CONTENT_SCRIPT_READY: {
+      const tabId = sender.tab?.id;
+      if (!tabId) {
+        sendResponse({ ok: true });
+        return true;
+      }
+      loadPendingCapture().then((pending) => {
+        if (pending && pending.tabId === tabId) {
+          // Check URL matches (same pathname)
+          try {
+            const pendingPath = new URL(pending.url).pathname;
+            const currentPath = sender.tab?.url ? new URL(sender.tab.url).pathname : pendingPath;
+            if (pendingPath !== currentPath) {
+              console.log('[Pablo] URL mismatch after refresh, aborting capture');
+              savePendingCapture(null);
+              sendResponse({ ok: true });
+              return;
+            }
+          } catch { /* URL parse failed, continue anyway */ }
+
+          // Check timeout (30s max)
+          if (Date.now() - pending.startedAt > 30000) {
+            console.log('[Pablo] Capture timed out');
+            savePendingCapture(null);
+            sendResponse({ ok: true });
+            return;
+          }
+
+          // Send continue capture message to the tab
+          chrome.tabs.sendMessage(tabId, {
+            type: MSG.CONTINUE_CAPTURE,
+            fingerprint: pending.fingerprint,
+            immediatePayload: pending.immediatePayload,
+          }, () => {
+            void chrome.runtime.lastError;
+          });
+          savePendingCapture(null);
+        }
+        sendResponse({ ok: true });
+      });
+      return true;
+    }
+
+    case MSG.COLLECT_ENTRANCE_ANIMATIONS: {
+      const tabId = sender.tab?.id;
+      if (!tabId) {
+        sendResponse({ data: null });
+        return true;
+      }
+      chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: collectEntranceAnimationsInMainWorld,
+      }).then((results) => {
+        sendResponse({ data: results?.[0]?.result ?? null });
+      }).catch(() => {
+        sendResponse({ data: null });
+      });
+      return true;
+    }
+
+    case MSG.COLLECT_INTERSECTION_DATA: {
+      const tabId = sender.tab?.id;
+      if (!tabId) {
+        sendResponse({ data: null });
+        return true;
+      }
+      chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: collectIntersectionDataInMainWorld,
       }).then((results) => {
         sendResponse({ data: results?.[0]?.result ?? null });
       }).catch(() => {

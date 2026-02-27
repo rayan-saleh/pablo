@@ -192,6 +192,50 @@ export interface DomMutationRecording {
   mutations: DomMutationRecord[];
 }
 
+// --- Element Fingerprint (for re-identification across page refresh) ---
+
+export interface ElementFingerprint {
+  cssSelector: string;
+  xpathSelector: string;
+  id: string | null;
+  dataAttributes: Record<string, string>;
+  ariaLabel: string | null;
+  textContentHash: string;
+  tagName: string;
+  childCount: number;
+  boundingRect: { relativeTop: number; relativeLeft: number; width: number; height: number };
+}
+
+// --- Post-Refresh Animation Capture Types ---
+
+export interface ComputedStyleDiff {
+  selector: string;
+  property: string;
+  before: string;
+  after: string;
+}
+
+export interface EntranceAnimationData {
+  webAnimationSnapshots: ActiveAnimationData[];
+  domMutations: DomMutationRecord[];
+  computedStyleDiffs: ComputedStyleDiff[];
+  duration: number;
+}
+
+export interface ScrollAnimationData {
+  webAnimationSnapshots: ActiveAnimationData[];
+  domMutations: DomMutationRecord[];
+  computedStyleDiffs: ComputedStyleDiff[];
+  intersectionObserverTriggered: boolean;
+  duration: number;
+}
+
+export interface InteractionAnimationData {
+  hover?: { webAnimations: ActiveAnimationData[]; domMutations: DomMutationRecord[]; computedStyleDiffs: ComputedStyleDiff[] };
+  click?: { webAnimations: ActiveAnimationData[]; domMutations: DomMutationRecord[]; computedStyleDiffs: ComputedStyleDiff[] };
+  focus?: { webAnimations: ActiveAnimationData[]; domMutations: DomMutationRecord[]; computedStyleDiffs: ComputedStyleDiff[] };
+}
+
 export interface AnimationData {
   cssAnimations: CSSAnimationData[];
   cssTransitions: CSSTransitionData[];
@@ -204,6 +248,9 @@ export interface AnimationData {
   gsap?: GsapData;
   domRecording?: DomMutationRecording;
   pageLoadRecording?: DomMutationRecording;
+  entranceAnimations?: EntranceAnimationData;
+  scrollAnimations?: ScrollAnimationData;
+  interactionAnimations?: InteractionAnimationData;
   summary: string;
 }
 
