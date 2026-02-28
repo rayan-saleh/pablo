@@ -67,7 +67,7 @@ export function Popup() {
   const { text: statusText, color: statusColor } = statusConfig[status];
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-4" style={{ minWidth: 320 }}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <img src={chrome.runtime.getURL('icons/logo.svg')} alt="Pablo" className="w-6 h-6" />
@@ -116,6 +116,12 @@ export function Popup() {
           Start Inspecting
         </button>
       )}
+
+      <div className="pt-2 border-t border-gray-100 text-center">
+        <span className="text-[10px] text-gray-400">
+          v{chrome.runtime.getManifest().version}
+        </span>
+      </div>
     </div>
   );
 }

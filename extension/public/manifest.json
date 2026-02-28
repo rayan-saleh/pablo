@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Pablo",
-  "description": "Hover over any component, click, and get a self-contained HTML file on your clipboard.",
+  "description": "Copy any UI component from the web. Hover, click, and get production-ready HTML + CSS — with fonts, animations, GSAP, Framer Motion, Webflow IX2, and 17+ framework support.",
   "version": "0.2.0",
   "permissions": ["activeTab", "tabs", "scripting", "clipboardWrite", "webNavigation", "storage"],
   "host_permissions": ["<all_urls>"],
