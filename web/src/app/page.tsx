@@ -86,64 +86,6 @@ const steps = [
   },
 ];
 
-const features = [
-  {
-    title: "17+ Framework Detection",
-    description: "Auto-detects React, Vue, Angular, Svelte, Webflow, Framer, Shopify, WordPress, and more.",
-  },
-  {
-    title: "Full Animation Fidelity",
-    description: "Captures CSS transitions, @keyframes, and :hover/:active/:focus states exactly as they appear.",
-  },
-  {
-    title: "GSAP Animation Recording",
-    description: "Monkey-patches GSAP at document_start to record and replay timeline animations.",
-  },
-  {
-    title: "React Fiber Tree Walking",
-    description: "Walks the React fiber tree to extract Framer Motion props, spring physics, and variants.",
-  },
-  {
-    title: "Webflow IX2 Interactions",
-    description: "Captures Webflow IX2 scroll and entrance animations with full interaction data.",
-  },
-  {
-    title: "Font & Pseudo-Element Extraction",
-    description: "Embeds @font-face declarations and captures ::before/::after pseudo-element styles.",
-  },
-  {
-    title: "Production-Ready Output",
-    description: "Collapses shorthand properties, deduplicates styles, and cleans up browser defaults.",
-  },
-  {
-    title: "Page-Load & Scroll Animations",
-    description: "Refreshes the page and re-identifies elements to capture entrance and scroll-triggered animations.",
-  },
-];
-
-const underTheHood = [
-  {
-    title: "Multi-World Architecture",
-    description:
-      "Isolated world for safe DOM inspection, main world for framework access, coordinated through a service worker message bus.",
-  },
-  {
-    title: "Element Fingerprinting",
-    description:
-      "Generates stable fingerprints for DOM elements so they can be re-identified after page refresh for animation capture.",
-  },
-  {
-    title: "GSAP Monkey-Patching",
-    description:
-      "Injects at document_start to intercept gsap.to/from/fromTo calls, recording all tween parameters before playback.",
-  },
-  {
-    title: "Computed Style Diffing",
-    description:
-      "Diffs computed styles against browser defaults to emit only meaningful CSS declarations, not thousands of inherited values.",
-  },
-];
-
 export default function Home() {
   return (
     <>
@@ -217,31 +159,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Features */}
-      <section id="features" className="border-t border-white/5 py-20">
-        <div className="mx-auto max-w-5xl px-6">
-          <div className="mb-12 text-center">
-            <h2 className="text-2xl font-bold text-white sm:text-3xl">
-              What makes Pablo different
-            </h2>
-            <p className="mt-3 text-zinc-400">
-              Not just screenshots — real, production-ready code.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {features.map((feature) => (
-              <div
-                key={feature.title}
-                className="rounded-2xl border border-white/5 bg-zinc-900/60 p-6"
-              >
-                <h3 className="text-base font-semibold text-white">{feature.title}</h3>
-                <p className="mt-2 text-sm text-zinc-400">{feature.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Showcase */}
       <section className="border-t border-white/5 py-20">
         <div className="mx-auto max-w-5xl px-6">
@@ -251,7 +168,7 @@ export default function Home() {
             </h2>
             <p className="mt-3 text-zinc-400">
               These are actual Pablo outputs — live, interactive components.
-              Original on the left, Pablo output on the right.
+              Drag the slider to compare.
             </p>
           </div>
 
@@ -272,31 +189,6 @@ export default function Home() {
                 <span className="text-sm font-medium">Copy result appears here</span>
               </div>
             </ShowcaseCard>
-          </div>
-        </div>
-      </section>
-
-      {/* Under the Hood */}
-      <section id="under-the-hood" className="border-t border-white/5 py-20">
-        <div className="mx-auto max-w-5xl px-6">
-          <div className="mb-12 text-center">
-            <h2 className="text-2xl font-bold text-white sm:text-3xl">
-              Under the hood
-            </h2>
-            <p className="mt-3 text-zinc-400">
-              The technical details for the curious.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {underTheHood.map((item) => (
-              <div
-                key={item.title}
-                className="rounded-2xl border border-white/5 bg-zinc-900/60 p-6"
-              >
-                <h3 className="text-base font-semibold text-white">{item.title}</h3>
-                <p className="mt-2 text-sm text-zinc-400">{item.description}</p>
-              </div>
-            ))}
           </div>
         </div>
       </section>

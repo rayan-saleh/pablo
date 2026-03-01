@@ -1,5 +1,7 @@
 "use client";
 
+import { useCallback, useRef, useState } from "react";
+
 export function ShowcaseCard({
   siteName,
   strategy,
@@ -15,6 +17,38 @@ export function ShowcaseCard({
   lhsContent?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const [split, setSplit] = useState(50);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
+
+  const updateSplit = useCallback((clientX: number) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const pct = ((clientX - rect.left) / rect.width) * 100;
+    setSplit(Math.min(100, Math.max(0, pct)));
+  }, []);
+
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      dragging.current = true;
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      updateSplit(e.clientX);
+    },
+    [updateSplit],
+  );
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!dragging.current) return;
+      updateSplit(e.clientX);
+    },
+    [updateSplit],
+  );
+
+  const onPointerUp = useCallback(() => {
+    dragging.current = false;
+  }, []);
+
   return (
     <div className="overflow-hidden rounded-2xl border border-white/5 bg-zinc-900/60">
       {/* Header */}
@@ -28,20 +62,34 @@ export function ShowcaseCard({
         </span>
       </div>
 
-      {/* Before / After */}
-      <div className="grid grid-cols-1 md:grid-cols-2">
-        {/* Original */}
-        <div className="relative border-b border-white/5 md:border-b-0 md:border-r">
+      {/* Slider area */}
+      <div
+        ref={containerRef}
+        className="relative min-h-[40rem] select-none overflow-hidden"
+      >
+        {/* Copied layer (bottom — revealed as slider moves right) */}
+        <div className="absolute inset-0">
+          <span className="absolute right-4 top-4 z-10 rounded-md bg-pablo-600/20 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-pablo-400">
+            Copied with Pablo
+          </span>
+          <div className="flex min-h-[40rem] items-center justify-center bg-zinc-950/30 p-6">
+            {children}
+          </div>
+        </div>
+
+        {/* Original layer (top — clipped to left portion) */}
+        <div
+          className="absolute inset-0"
+          style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }}
+        >
           <span className="absolute left-4 top-4 z-10 rounded-md bg-zinc-800/80 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500">
             Original
           </span>
-          <div className="h-72 bg-zinc-950/50 overflow-hidden">
+          <div className="bg-zinc-950/50">
             {lhsContent ? (
-              <div className="h-full w-full">
-                {lhsContent}
-              </div>
+              <div className="w-full">{lhsContent}</div>
             ) : (
-              <div className="flex h-full items-center justify-center p-6">
+              <div className="flex min-h-[40rem] items-center justify-center p-6">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={imagePath}
@@ -77,13 +125,31 @@ export function ShowcaseCard({
           </div>
         </div>
 
-        {/* Copied */}
-        <div className="relative">
-          <span className="absolute left-4 top-4 z-10 rounded-md bg-pablo-600/20 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-pablo-400">
-            Copied with Pablo
-          </span>
-          <div className="flex h-72 items-center justify-center bg-zinc-950/30 p-6">
-            {children}
+        {/* Slider handle */}
+        <div
+          className="absolute top-0 bottom-0 z-20 w-1 cursor-col-resize"
+          style={{ left: `${split}%`, transform: "translateX(-50%)" }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+        >
+          {/* Vertical line */}
+          <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white/30" />
+          {/* Grab handle */}
+          <div className="absolute left-1/2 top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-zinc-800/90 backdrop-blur">
+            <svg
+              className="h-4 w-4 text-zinc-300"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M8 9l-3 3 3 3m8-6l3 3-3 3"
+              />
+            </svg>
           </div>
         </div>
       </div>
