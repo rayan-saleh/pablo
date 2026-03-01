@@ -76,7 +76,7 @@ export function ShowcaseCard({
         className="relative min-h-[40rem] select-none overflow-hidden"
       >
         {/* Copied layer (bottom — revealed as slider moves right) */}
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 isolate">
           <span className="absolute right-3 top-3 z-10 border border-dashed border-[#7aa2f7]/30 bg-[#7aa2f7]/10 px-2 py-0.5 text-[9.3px] font-medium uppercase tracking-wider text-[#7aa2f7]">
             Copied with Pablo
           </span>
@@ -87,7 +87,7 @@ export function ShowcaseCard({
 
         {/* Original layer (top — clipped to left portion) */}
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 isolate"
           style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }}
         >
           <span className="absolute left-3 top-3 z-10 border border-dashed border-white/[0.13] bg-white/[0.02] px-2 py-0.5 text-[9.3px] font-medium uppercase tracking-wider text-[#737c8d]">
@@ -97,37 +97,13 @@ export function ShowcaseCard({
             {lhsContent ? (
               <div className="h-full w-full">{lhsContent}</div>
             ) : (
-              <div className="flex min-h-[40rem] items-center justify-center p-6">
+              <div className="min-h-[40rem]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={imagePath}
                   alt={`${siteName} screenshot`}
-                  className="hidden max-h-full max-w-full object-contain"
-                  onLoad={(e) => {
-                    (e.target as HTMLImageElement).classList.remove("hidden");
-                    (
-                      (e.target as HTMLImageElement)
-                        .nextElementSibling as HTMLElement
-                    )?.classList.add("hidden");
-                  }}
+                  className="h-full w-full object-cover object-top"
                 />
-                <div className="flex flex-col items-center gap-3 text-[#737c8d]">
-                  <svg
-                    className="h-10 w-10"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z"
-                    />
-                  </svg>
-                  <span className="text-xs font-medium">{siteName}</span>
-                  <span className="text-[10px]">screenshot coming soon</span>
-                </div>
               </div>
             )}
           </div>

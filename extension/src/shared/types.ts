@@ -33,6 +33,7 @@ export const REACT_BASED_STACKS = new Set<TechStack>(['react', 'nextjs', 'gatsby
 export type InspectorMode = 'component' | 'page';
 
 export type InspectorStatus = 'ready' | 'inspecting' | 'copied' | 'error';
+export type CaptureContextLevel = 'minimal' | 'medium' | 'max';
 
 export interface ExtractionMeta {
   tag: string;
@@ -321,6 +322,48 @@ export interface FontData {
   pseudoContent: PseudoContent[];
 }
 
+// --- LLM Reconstruction Bundle ---
+
+export interface LlmCaptureBundle {
+  version: 1;
+  boundary: {
+    selector: string;
+    tag: string;
+  };
+  structure: {
+    authoredHtml: string;
+    styledHtml: string;
+    nodeCount: number;
+    truncated?: boolean;
+  };
+  styles: {
+    classTokens: string[];
+    cssRules: string[];
+    cssVariables: Record<string, string>;
+    truncated?: boolean;
+  };
+  behavior: {
+    interactiveSelectors: string[];
+    ariaRoles: string[];
+    animationSummary?: string;
+    semanticRoles?: string[];
+    interactionPatterns?: string[];
+  };
+  assets: {
+    imageUrls: string[];
+    svgCount: number;
+    fontFamilies: string[];
+  };
+  env: {
+    framework: TechStack;
+    strategy: StrategyKey;
+    captureContext: CaptureContextLevel;
+    url: string;
+    viewport: { width: number; height: number };
+  };
+  prompt: string;
+}
+
 // --- Clipboard Payload ---
 
 export interface ClipboardPayload {
@@ -344,5 +387,6 @@ export interface ClipboardPayload {
     interactionPatterns?: InteractionPattern[];
     fonts?: FontData;
     summary?: string;
+    llm?: LlmCaptureBundle;
   };
 }

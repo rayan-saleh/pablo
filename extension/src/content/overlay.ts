@@ -1,4 +1,4 @@
-import type { InspectorMode, TechStack, ClipboardPayload, StrategyKey, ComponentData, ComponentTree, AnimationData, FramerMotionData, GsapData, DomMutationRecording, SemanticHint, InteractionPattern, ModuleDependency, ElementFingerprint } from '../shared/types';
+import type { InspectorMode, TechStack, ClipboardPayload, StrategyKey, ComponentData, ComponentTree, AnimationData, FramerMotionData, GsapData, DomMutationRecording, SemanticHint, InteractionPattern, ModuleDependency, ElementFingerprint, CaptureContextLevel } from '../shared/types';
 import { REACT_BASED_STACKS } from '../shared/types';
 import { detectStack, probeReactViaServiceWorker } from './detector';
 import { extractElement, getStrategy } from './extractor';
@@ -7,9 +7,11 @@ import { extractFonts } from './font-extractor';
 import { recordMutations } from './mutation-recorder';
 import { MSG } from '../shared/messages';
 import { startFullCapture, continueCapture } from './capture-orchestrator';
+import { buildLlmBundle } from './llm-bundle';
 
 let active = false;
 let mode: InspectorMode = 'component';
+let captureContext: CaptureContextLevel = 'medium';
 let currentTarget: Element | null = null;
 let detectedStack: TechStack = 'generic';
 
@@ -172,6 +174,117 @@ function buildSelector(el: Element): string {
     ? '.' + el.className.trim().split(/\s+/).join('.')
     : '';
   return `${tag}${cls}`;
+}
+
+function normalizeBoundary(el: Element): Element {
+  let seed = el;
+  const pos = window.getComputedStyle(seed).position;
+  if ((pos === 'absolute' || pos === 'fixed') && seed.parentElement) {
+    seed = seed.parentElement;
+  }
+
+  let best = seed;
+  let bestScore = boundaryScore(seed);
+  let current: Element | null = seed.parentElement;
+  let depth = 0;
+
+  while (current && depth < 6) {
+    const score = boundaryScore(current);
+    if (score > bestScore) {
+      best = current;
+      bestScore = score;
+    }
+    if (isHardBoundary(current)) break;
+    current = current.parentElement;
+    depth++;
+  }
+
+  return best;
+}
+
+function isHardBoundary(el: Element): boolean {
+  const tag = el.tagName.toLowerCase();
+  if (tag === 'section' || tag === 'article' || tag === 'main' || tag === 'aside') return true;
+  const role = el.getAttribute('role');
+  return role === 'main' || role === 'region' || role === 'banner' || role === 'navigation';
+}
+
+function boundaryScore(el: Element): number {
+  const rect = el.getBoundingClientRect();
+  const vw = Math.max(window.innerWidth, 1);
+  const vh = Math.max(window.innerHeight, 1);
+  const areaRatio = (rect.width * rect.height) / (vw * vh);
+  const tag = el.tagName.toLowerCase();
+
+  let score = 0;
+  if (tag === 'section' || tag === 'article' || tag === 'main') score += 5;
+  if (el.querySelector('h1,h2,h3,h4,h5,h6')) score += 3;
+  if (el.querySelector('button,a,[role=\"button\"],[role=\"link\"]')) score += 2;
+  if (areaRatio >= 0.05 && areaRatio <= 0.95) score += 2;
+  if (areaRatio > 0.95) score -= 3;
+  if (rect.width < 120 || rect.height < 80) score -= 2;
+  return score;
+}
+
+function chooseExtractionTarget(
+  clickedTarget: Element,
+  strategy: ReturnType<typeof getStrategy>,
+  contextLevel: CaptureContextLevel,
+): Element {
+  const expanded = strategy.expandSelection(clickedTarget);
+  if (contextLevel === 'minimal') {
+    return expanded;
+  }
+
+  const normalized = normalizeBoundary(expanded);
+  if (contextLevel === 'medium') {
+    return normalized;
+  }
+
+  // Max: allow one stronger climb to include nearby context around the component.
+  let best = normalized;
+  let current: Element | null = normalized.parentElement;
+  let depth = 0;
+  while (current && depth < 8) {
+    const score = boundaryScore(current);
+    const bestScore = boundaryScore(best);
+    if (score >= bestScore && current.getBoundingClientRect().width <= window.innerWidth * 0.98) {
+      best = current;
+    }
+    if (isHardBoundary(current)) break;
+    current = current.parentElement;
+    depth++;
+  }
+  return best;
+}
+
+function compressPageLoadMutations(raw: any[], contextLevel: CaptureContextLevel): any[] {
+  if (raw.length <= 1) return raw;
+
+  const deduped: any[] = [];
+  let prevKey = '';
+  for (const m of raw) {
+    const key = `${m.ts}|${m.type}|${m.target}|${m.old ?? ''}|${m.new ?? ''}`;
+    if (key === prevKey) continue;
+    deduped.push(m);
+    prevKey = key;
+  }
+
+  const MAX_KEEP = contextLevel === 'minimal' ? 90 : contextLevel === 'max' ? 320 : 180;
+  if (deduped.length <= MAX_KEEP) return deduped;
+
+  const headCount = 40;
+  const tailCount = 40;
+  const middle = deduped.slice(headCount, deduped.length - tailCount);
+  const maxMiddle = MAX_KEEP - headCount - tailCount;
+  const step = Math.max(1, Math.ceil(middle.length / maxMiddle));
+  const sampledMiddle = middle.filter((_m, i) => i % step === 0).slice(0, maxMiddle);
+
+  return [
+    ...deduped.slice(0, headCount),
+    ...sampledMiddle,
+    ...deduped.slice(deduped.length - tailCount),
+  ];
 }
 
 /**
@@ -537,25 +650,27 @@ async function onClick(e: MouseEvent): Promise<void> {
 async function handleExtraction(target: Element): Promise<void> {
   showExtracting();
   try {
+    const strategy = getStrategy(detectedStack);
+    const extractionTarget = chooseExtractionTarget(target, strategy, captureContext);
+
     // Start mutation recording immediately (runs for 3s in background)
-    const mutationPromise = recordMutations(target, 3000);
+    const mutationPromise = recordMutations(extractionTarget, 3000);
 
     // Always extract HTML (styled)
-    const html = extractElement(target, detectedStack);
+    const html = extractElement(extractionTarget, detectedStack);
 
     // Extract animations (universal CSS layer)
-    let animations: AnimationData | undefined = extractAnimations(target);
+    let animations: AnimationData | undefined = extractAnimations(extractionTarget);
     console.log('[Pablo] Animation extraction:', animations ? 'data found' : 'none');
 
     // Run strategy-specific animation extraction
-    const strategy = getStrategy(detectedStack);
     if (strategy.extractAnimations) {
-      const strategyAnimations = strategy.extractAnimations(target);
+      const strategyAnimations = strategy.extractAnimations(extractionTarget);
       animations = mergeAnimationData(animations, strategyAnimations);
     }
 
     // Collect GSAP data from main world (works for all stacks)
-    const gsapData = await collectGsapViaServiceWorker(target);
+    const gsapData = await collectGsapViaServiceWorker(extractionTarget);
     if (gsapData) {
       console.log('[Pablo] GSAP data found:', gsapData.version || 'detected',
         'scrollTriggers:', gsapData.scrollTriggers.length, 'tweens:', gsapData.tweens.length);
@@ -566,12 +681,13 @@ async function handleExtraction(target: Element): Promise<void> {
     }
 
     // Collect page-load DOM mutations from main world
-    const pageLoadMutations = await collectDomMutationsViaServiceWorker(target);
+    const pageLoadMutations = await collectDomMutationsViaServiceWorker(extractionTarget);
     if (pageLoadMutations && pageLoadMutations.length > 0) {
-      console.log('[Pablo] Page-load mutations:', pageLoadMutations.length);
+      const compressedPageLoadMutations = compressPageLoadMutations(pageLoadMutations, captureContext);
+      console.log('[Pablo] Page-load mutations:', pageLoadMutations.length, 'compressed to', compressedPageLoadMutations.length);
       const plRecording: DomMutationRecording = {
         duration: pageLoadMutations[pageLoadMutations.length - 1].ts - pageLoadMutations[0].ts,
-        mutations: pageLoadMutations.map((m: any) => {
+        mutations: compressedPageLoadMutations.map((m: any) => {
           let changes: Record<string, string>;
           if (m.type === 'text' || m.type === 'style') {
             changes = { old: m.old, new: m.new };
@@ -595,7 +711,7 @@ async function handleExtraction(target: Element): Promise<void> {
     let tree: ComponentTree | undefined;
     if (REACT_BASED_STACKS.has(detectedStack) || detectedStack === 'framer') {
       console.log('[Pablo] Attempting fiber collection via service worker');
-      const fiberData = await collectFiberViaServiceWorker(target);
+      const fiberData = await collectFiberViaServiceWorker(extractionTarget);
       if (fiberData) {
         console.log('[Pablo] Fiber data received, components:', fiberData.components.length);
         tree = buildComponentTree(fiberData.components, fiberData.rootComponentName);
@@ -620,17 +736,17 @@ async function handleExtraction(target: Element): Promise<void> {
     }
 
     // Infer semantic roles
-    const semanticHints = inferSemanticRoles(target);
+    const semanticHints = inferSemanticRoles(extractionTarget);
 
     // Detect interaction patterns
-    const interactionPatterns = detectInteractionPatterns(target);
+    const interactionPatterns = detectInteractionPatterns(extractionTarget);
 
     // Extract font data
-    const fonts = extractFonts(target);
+    const fonts = extractFonts(extractionTarget);
     console.log('[Pablo] Font extraction:', fonts.fontFaces.length, 'font-faces,', fonts.pseudoContent.length, 'pseudo-elements');
 
     // Generate summary
-    const summary = generateComponentSummary(target, semanticHints);
+    const summary = generateComponentSummary(extractionTarget, semanticHints);
 
     // Await mutation recording and merge into animations
     const domRecording = await mutationPromise;
@@ -652,14 +768,26 @@ async function handleExtraction(target: Element): Promise<void> {
         strategy: getStrategyKey(detectedStack),
       },
       component: {
-        selector: buildSelector(target),
-        tag: target.tagName.toLowerCase(),
+        selector: buildSelector(extractionTarget),
+        tag: extractionTarget.tagName.toLowerCase(),
         html,
         ...(tree ? { tree } : {}),
         ...(animations ? { animations } : {}),
         ...(semanticHints.length > 0 ? { semanticHints } : {}),
         ...(interactionPatterns.length > 0 ? { interactionPatterns } : {}),
         ...(fonts && (fonts.fontFaces.length > 0 || fonts.pseudoContent.length > 0) ? { fonts } : {}),
+        llm: buildLlmBundle({
+          target: extractionTarget,
+          selector: buildSelector(extractionTarget),
+          strategy: getStrategyKey(detectedStack),
+          framework: detectedStack,
+          captureContext,
+          styledHtml: html,
+          animations,
+          semanticHints,
+          interactionPatterns,
+          fonts,
+        }),
         summary,
       },
     };
@@ -668,7 +796,7 @@ async function handleExtraction(target: Element): Promise<void> {
     hideExtracting(false);
     showCaptureProgress('Starting animation capture…');
 
-    startFullCapture(target, payload, (phase) => {
+    startFullCapture(extractionTarget, payload, (phase) => {
       updateCapturePhase(phase);
     });
     // The page will now refresh. continueCapture will be called after refresh via handleContinueCapture.
@@ -848,11 +976,12 @@ function onKeyDown(e: KeyboardEvent): void {
 
 // --- Public API ---
 
-export async function activate(newMode: InspectorMode): Promise<void> {
-  console.log('[Pablo] Overlay activate, mode:', newMode);
+export async function activate(newMode: InspectorMode, newCaptureContext: CaptureContextLevel = 'medium'): Promise<void> {
+  console.log('[Pablo] Overlay activate, mode:', newMode, 'captureContext:', newCaptureContext);
   if (active) deactivate();
 
   mode = newMode;
+  captureContext = newCaptureContext;
   detectedStack = detectStack();
   active = true;
 

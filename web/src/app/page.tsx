@@ -6,7 +6,7 @@ import { WebflowMock } from "@/components/mocks/WebflowMock";
 import { FramerMock } from "@/components/mocks/FramerMock";
 import { AllbirdsMock } from "@/components/mocks/AllbirdsMock";
 import { FloatingIconsHeroMock } from "@/components/mocks/FloatingIconsHeroMock";
-import { FloatingIconsHeroCopy } from "@/components/mocks/FloatingIconsHeroCopy";
+import { FloatingIconsHeroCopied } from "@/components/mocks/FloatingIconsHeroCopied";
 import { DotTxtHeroMock } from "@/components/mocks/DotTxtHeroMock";
 
 function GitHubIcon({ className = "h-5 w-5" }: { className?: string }) {
@@ -57,7 +57,7 @@ const showcaseItems = [
     siteName: ".txt",
     strategy: "react",
     description: "Oversized mono hero, JSON block, CTA chips and blink cursor",
-    imagePath: "/showcase/dottxt.png",
+    imagePath: "/showcase/txt.png",
     Mock: DotTxtHeroMock,
   },
 ];
@@ -208,7 +208,7 @@ export default function Home() {
               imagePath="/showcase/floating-icons-hero.png"
               lhsContent={<FloatingIconsHeroMock />}
             >
-              <FloatingIconsHeroCopy />
+              <FloatingIconsHeroCopied />
             </ShowcaseCard>
           </div>
         </div>

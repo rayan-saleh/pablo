@@ -1,4 +1,4 @@
-import type { InspectorMode, InspectorStatus, ExtractionMeta, ElementFingerprint, ClipboardPayload } from './types';
+import type { InspectorMode, InspectorStatus, ExtractionMeta, ElementFingerprint, ClipboardPayload, CaptureContextLevel } from './types';
 
 export const MSG = {
   ACTIVATE_INSPECTOR: 'ACTIVATE_INSPECTOR',
@@ -22,6 +22,7 @@ export const MSG = {
 export type ActivateInspectorMsg = {
   type: typeof MSG.ACTIVATE_INSPECTOR;
   mode: InspectorMode;
+  captureContext: CaptureContextLevel;
 };
 
 export type DeactivateInspectorMsg = {

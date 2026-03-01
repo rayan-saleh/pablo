@@ -1,16 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import type { InspectorMode, InspectorStatus, TechStack } from '../shared/types';
+import type { InspectorMode, InspectorStatus, TechStack, CaptureContextLevel } from '../shared/types';
 import { STACK_DISPLAY_NAMES } from '../shared/types';
 import { MSG, type ExtensionMessage } from '../shared/messages';
 import { ModeToggle } from './components/ModeToggle';
+
+const CAPTURE_CONTEXT_STORAGE_KEY = 'captureContextLevel';
+const CAPTURE_LEVELS: CaptureContextLevel[] = ['minimal', 'medium', 'max'];
 
 export function Popup() {
   const [mode, setMode] = useState<InspectorMode>('component');
   const [status, setStatus] = useState<InspectorStatus>('ready');
   const [stack, setStack] = useState<TechStack | null>(null);
   const [lastCopy, setLastCopy] = useState<{ tag: string; size: number } | null>(null);
+  const [captureContext, setCaptureContext] = useState<CaptureContextLevel>('medium');
 
   useEffect(() => {
+    chrome.storage.local.get(CAPTURE_CONTEXT_STORAGE_KEY, (result) => {
+      void chrome.runtime.lastError;
+      const saved = result?.[CAPTURE_CONTEXT_STORAGE_KEY];
+      if (saved === 'minimal' || saved === 'medium' || saved === 'max') {
+        setCaptureContext(saved);
+      }
+    });
+
     // Detect tech stack immediately on popup open
     chrome.runtime.sendMessage({ type: MSG.DETECT_STACK }, (response) => {
       void chrome.runtime.lastError;
@@ -43,8 +55,8 @@ export function Popup() {
   }
 
   function handleStart() {
-    console.log('[Pablo] User action: start, mode:', mode);
-    sendToActiveTab({ type: MSG.ACTIVATE_INSPECTOR, mode });
+    console.log('[Pablo] User action: start, mode:', mode, 'captureContext:', captureContext);
+    sendToActiveTab({ type: MSG.ACTIVATE_INSPECTOR, mode, captureContext });
     setStatus('inspecting');
     window.close();
   }
@@ -56,6 +68,16 @@ export function Popup() {
   }
 
   const isInspecting = status === 'inspecting';
+  const captureLevelIndex = CAPTURE_LEVELS.indexOf(captureContext);
+
+  function handleCaptureLevelChange(nextIndex: number): void {
+    const bounded = Math.min(CAPTURE_LEVELS.length - 1, Math.max(0, nextIndex));
+    const nextLevel = CAPTURE_LEVELS[bounded];
+    setCaptureContext(nextLevel);
+    chrome.storage.local.set({ [CAPTURE_CONTEXT_STORAGE_KEY]: nextLevel }, () => {
+      void chrome.runtime.lastError;
+    });
+  }
 
   const statusConfig: Record<InspectorStatus, { text: string; color: string }> = {
     ready: { text: 'Ready', color: 'bg-gray-200 text-gray-700' },
@@ -88,6 +110,28 @@ export function Popup() {
       )}
 
       <ModeToggle mode={mode} onChange={setMode} disabled={isInspecting} />
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-500">Capture context</span>
+          <span className="text-xs font-medium text-gray-700 capitalize">{captureContext}</span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={2}
+          step={1}
+          value={captureLevelIndex}
+          onChange={(e) => handleCaptureLevelChange(Number(e.target.value))}
+          disabled={isInspecting}
+          className="w-full"
+        />
+        <div className="flex justify-between text-[10px] text-gray-400">
+          <span>Minimal</span>
+          <span>Medium</span>
+          <span>Max</span>
+        </div>
+      </div>
 
       <p className="text-xs text-gray-500">
         {mode === 'component'

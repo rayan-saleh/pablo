@@ -7,7 +7,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
   console.log('[Pablo] Content script received message:', message.type);
   switch (message.type) {
     case MSG.ACTIVATE_INSPECTOR:
-      activate(message.mode);
+      activate(message.mode, message.captureContext);
       sendResponse({ ok: true });
       break;
     case MSG.DEACTIVATE_INSPECTOR:
