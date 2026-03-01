@@ -50,16 +50,24 @@ export function ShowcaseCard({
   }, []);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/5 bg-zinc-900/60">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/5 px-6 py-4">
-        <div>
-          <h3 className="text-lg font-semibold text-white">{siteName}</h3>
-          <p className="mt-0.5 text-sm text-zinc-400">{description}</p>
+    <div className="overflow-hidden border border-white/[0.11] bg-[#0b0b0f]">
+      {/* Terminal-style header */}
+      <div className="flex items-center justify-between border-b border-white/[0.08] bg-gradient-to-r from-[#131722] to-[#10131b] px-4 py-3">
+        <div className="flex items-center gap-3">
+          {/* Traffic light dots */}
+          <div className="flex items-center gap-1.5">
+            <span className="h-[9px] w-[9px] rounded-full bg-[#ff5f57] border border-black/25" />
+            <span className="h-[9px] w-[9px] rounded-full bg-[#febc2e] border border-black/25" />
+            <span className="h-[9px] w-[9px] rounded-full bg-[#28c840] border border-black/25" />
+          </div>
+          <h3 className="text-[12.2px] font-medium text-[#eef2f8]">{siteName}</h3>
         </div>
-        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-zinc-400">
-          {strategy}
-        </span>
+        <div className="flex items-center gap-3">
+          <p className="text-[10px] text-[#737c8d] hidden sm:block">{description}</p>
+          <span className="border border-dashed border-white/[0.13] bg-white/[0.01] px-2 py-0.5 text-[9.8px] font-medium text-[#a0a8b8]">
+            {strategy}
+          </span>
+        </div>
       </div>
 
       {/* Slider area */}
@@ -69,10 +77,10 @@ export function ShowcaseCard({
       >
         {/* Copied layer (bottom — revealed as slider moves right) */}
         <div className="absolute inset-0">
-          <span className="absolute right-4 top-4 z-10 rounded-md bg-pablo-600/20 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-pablo-400">
+          <span className="absolute right-3 top-3 z-10 border border-dashed border-[#7aa2f7]/30 bg-[#7aa2f7]/10 px-2 py-0.5 text-[9.3px] font-medium uppercase tracking-wider text-[#7aa2f7]">
             Copied with Pablo
           </span>
-          <div className="flex min-h-[40rem] items-center justify-center bg-zinc-950/30 p-6">
+          <div className="flex h-full min-h-[40rem] items-center justify-center bg-[#090b10] p-6">
             {children}
           </div>
         </div>
@@ -82,19 +90,19 @@ export function ShowcaseCard({
           className="absolute inset-0"
           style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }}
         >
-          <span className="absolute left-4 top-4 z-10 rounded-md bg-zinc-800/80 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+          <span className="absolute left-3 top-3 z-10 border border-dashed border-white/[0.13] bg-white/[0.02] px-2 py-0.5 text-[9.3px] font-medium uppercase tracking-wider text-[#737c8d]">
             Original
           </span>
-          <div className="bg-zinc-950/50">
+          <div className="h-full bg-[#0b0d12]">
             {lhsContent ? (
-              <div className="w-full">{lhsContent}</div>
+              <div className="h-full w-full">{lhsContent}</div>
             ) : (
               <div className="flex min-h-[40rem] items-center justify-center p-6">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={imagePath}
                   alt={`${siteName} screenshot`}
-                  className="hidden max-h-full max-w-full rounded-lg object-contain"
+                  className="hidden max-h-full max-w-full object-contain"
                   onLoad={(e) => {
                     (e.target as HTMLImageElement).classList.remove("hidden");
                     (
@@ -103,7 +111,7 @@ export function ShowcaseCard({
                     )?.classList.add("hidden");
                   }}
                 />
-                <div className="flex flex-col items-center gap-3 text-zinc-600">
+                <div className="flex flex-col items-center gap-3 text-[#737c8d]">
                   <svg
                     className="h-10 w-10"
                     fill="none"
@@ -117,8 +125,8 @@ export function ShowcaseCard({
                       d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z"
                     />
                   </svg>
-                  <span className="text-sm font-medium">{siteName}</span>
-                  <span className="text-xs">screenshot coming soon</span>
+                  <span className="text-xs font-medium">{siteName}</span>
+                  <span className="text-[10px]">screenshot coming soon</span>
                 </div>
               </div>
             )}
@@ -134,11 +142,11 @@ export function ShowcaseCard({
           onPointerUp={onPointerUp}
         >
           {/* Vertical line */}
-          <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white/30" />
+          <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white/20" />
           {/* Grab handle */}
-          <div className="absolute left-1/2 top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-zinc-800/90 backdrop-blur">
+          <div className="absolute left-1/2 top-1/2 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center border border-white/[0.15] bg-[#131722]/90 backdrop-blur">
             <svg
-              className="h-4 w-4 text-zinc-300"
+              className="h-3.5 w-3.5 text-[#a0a8b8]"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"

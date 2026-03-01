@@ -2,34 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-  --background: #09090b;
-  --foreground: #fafafa;
-  --card: #18181b;
-  --card-foreground: #fafafa;
-  --primary: #4c6ef5;
-  --primary-foreground: #ffffff;
-  --secondary: #27272a;
-  --secondary-foreground: #fafafa;
-  --muted: #27272a;
-  --muted-foreground: #a1a1aa;
-  --accent: #27272a;
-  --accent-foreground: #fafafa;
+  --background: #0a0b10;
+  --foreground: #f4f7fb;
+  --card: #0b0d12;
+  --card-foreground: #e7ebf2;
+  --primary: #7aa2f7;
+  --primary-foreground: #070f1f;
+  --secondary: #151923;
+  --secondary-foreground: #d9dee7;
+  --muted: #13171f;
+  --muted-foreground: #a0a8b8;
+  --accent: #9b74ff;
+  --accent-foreground: #f4f7fb;
   --destructive: #ef4444;
   --destructive-foreground: #fafafa;
-  --border: #27272a;
-  --input: #27272a;
-  --ring: #4c6ef5;
+  --border: rgba(255, 255, 255, 0.12);
+  --input: #151923;
+  --ring: #7aa2f7;
 }
 
 body {
   background: var(--background);
+  background-image:
+    radial-gradient(544px 288px at 16% 88%, rgba(73, 114, 217, 0.07), transparent 68%),
+    radial-gradient(416px 256px at 84% 12%, rgba(155, 116, 255, 0.04), transparent 70%);
+  background-attachment: fixed;
   color: var(--foreground);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
 ::selection {
-  background: rgba(92, 124, 250, 0.3);
+  background: rgba(122, 162, 247, 0.3);
+}
+
+/* Dashed separator utility */
+.dashed-separator {
+  background-image: repeating-linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.18) 0px,
+    rgba(255, 255, 255, 0.18) 10px,
+    transparent 10px,
+    transparent 18px
+  );
+  height: 1px;
+  opacity: 0.65;
 }

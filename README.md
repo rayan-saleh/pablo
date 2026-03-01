@@ -16,7 +16,9 @@
 
 ---
 
-![Demo](https://via.placeholder.com/800x400?text=Demo+GIF+coming+soon)
+<p align="center">
+  <video src="web/public/demo.mp4" width="800" autoplay muted loop playsinline></video>
+</p>
 
 ## What it does
 

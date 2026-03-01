@@ -6,6 +6,9 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        mono: ['"IBM Plex Mono"', '"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', '"Liberation Mono"', '"Courier New"', 'monospace'],
+      },
       keyframes: {
         fadeSlideUp: {
           "0%": { opacity: "0", transform: "translateY(12px)" },
@@ -47,13 +50,13 @@ const config: Config = {
         input: "var(--input)",
         ring: "var(--ring)",
         pablo: {
-          50: "#f0f4ff",
+          50: "#eef3ff",
           100: "#dbe4ff",
           200: "#bac8ff",
           300: "#91a7ff",
-          400: "#748ffc",
+          400: "#7aa2f7",
           500: "#5c7cfa",
-          600: "#4c6ef5",
+          600: "#4972d9",
           700: "#4263eb",
           800: "#3b5bdb",
           900: "#364fc7",

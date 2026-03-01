@@ -144,8 +144,10 @@ function showExtracting(): void {
   }
 }
 
-function hideExtracting(): void {
-  extracting = false;
+function hideExtracting(clearLock = true): void {
+  if (clearLock) {
+    extracting = false;
+  }
   if (overlayEl) {
     overlayEl.style.animation = '';
   }
@@ -494,7 +496,7 @@ function generateComponentSummary(element: Element, semanticHints?: SemanticHint
 // --- Event handlers ---
 
 function onMouseMove(e: MouseEvent): void {
-  if (!active) return;
+  if (!active || extracting) return;
 
   if (mode === 'page') {
     const target = getPageTarget();
@@ -663,7 +665,7 @@ async function handleExtraction(target: Element): Promise<void> {
     };
 
     // Start the full animation capture pipeline (refresh + entrance + scroll + interaction)
-    hideExtracting();
+    hideExtracting(false);
     showCaptureProgress('Starting animation capture…');
 
     startFullCapture(target, payload, (phase) => {
@@ -803,7 +805,7 @@ function flashGreen(): void {
 }
 
 function onKeyDown(e: KeyboardEvent): void {
-  if (!active) return;
+  if (!active || extracting) return;
 
   if (e.key === 'Escape') {
     deactivate();
