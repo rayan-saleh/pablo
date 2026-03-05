@@ -49,12 +49,12 @@ function Nav() {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         <a href="/" className="flex items-center gap-2.5">
           <svg className="h-6 w-6 text-[#f4f7fb]" viewBox="0 0 100 100" fill="currentColor">
-            <path fillRule="evenodd" d="M50 4C25 4 4 25 4 50s21 46 46 46 46-21 46-46S75 4 50 4zm0 7c21.5 0 39 17.5 39 39S71.5 89 50 89 11 71.5 11 50s17.5-39 39-39z"/>
-            <rect x="48.5" y="16" width="3" height="62" rx="1.5"/>
-            <circle cx="33" cy="42" r="7"/>
-            <path d="M67 35l7 7-7 7-7-7z"/>
-            <path d="M45 50l5 14 8-10z"/>
-            <path d="M30 74q20 8 40 0-20 5-40 0z"/>
+            <path fillRule="evenodd" d="M50 4C25 5 8 24 8 48c0 26 19 46 42 48 23-2 42-22 42-48C92 24 75 3 50 4zm0 8c20 1 34 16 34 36 0 22-15 38-34 40C30 86 16 70 16 48 16 28 30 13 50 12z"/>
+            <path d="M34 36l8-6 8 6-8 6z"/>
+            <circle cx="66" cy="48" r="7"/>
+            <path d="M48 34l8 20-16 0z"/>
+            <rect x="48" y="14" width="3" height="60" rx="1.5"/>
+            <path d="M32 74l18-4 18 6-18 2z"/>
           </svg>
           <span className="text-[15px] font-semibold tracking-[-0.2px] text-[#f4f7fb] lowercase">Pablo</span>
         </a>
@@ -86,12 +86,12 @@ function Footer() {
       <div className="mx-auto flex max-w-6xl flex-col items-center gap-5 px-6 text-xs text-[#a0a8b8]">
         <div className="flex items-center gap-2">
           <svg className="h-4 w-4 text-[#d9dee7]" viewBox="0 0 100 100" fill="currentColor">
-            <path fillRule="evenodd" d="M50 4C25 4 4 25 4 50s21 46 46 46 46-21 46-46S75 4 50 4zm0 7c21.5 0 39 17.5 39 39S71.5 89 50 89 11 71.5 11 50s17.5-39 39-39z"/>
-            <rect x="48.5" y="16" width="3" height="62" rx="1.5"/>
-            <circle cx="33" cy="42" r="7"/>
-            <path d="M67 35l7 7-7 7-7-7z"/>
-            <path d="M45 50l5 14 8-10z"/>
-            <path d="M30 74q20 8 40 0-20 5-40 0z"/>
+            <path fillRule="evenodd" d="M50 4C25 5 8 24 8 48c0 26 19 46 42 48 23-2 42-22 42-48C92 24 75 3 50 4zm0 8c20 1 34 16 34 36 0 22-15 38-34 40C30 86 16 70 16 48 16 28 30 13 50 12z"/>
+            <path d="M34 36l8-6 8 6-8 6z"/>
+            <circle cx="66" cy="48" r="7"/>
+            <path d="M48 34l8 20-16 0z"/>
+            <rect x="48" y="14" width="3" height="60" rx="1.5"/>
+            <path d="M32 74l18-4 18 6-18 2z"/>
           </svg>
           <span className="font-semibold text-[#d9dee7] text-[13px]">pablo</span>
         </div>
