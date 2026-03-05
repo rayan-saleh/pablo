@@ -6,4 +6,82 @@ body {
   width: 320px;
   min-height: 200px;
   margin: 0;
+  background: #0a0b10;
+  color: #f4f7fb;
+  font-family: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular,
+    Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+::selection {
+  background: rgba(122, 162, 247, 0.3);
+}
+
+/* Dashed separator — matches landing page */
+.dashed-separator {
+  background-image: repeating-linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.18) 0px,
+    rgba(255, 255, 255, 0.18) 10px,
+    transparent 10px,
+    transparent 18px
+  );
+  height: 1px;
+  opacity: 0.65;
+}
+
+/* Custom range slider */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: #151923;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #7aa2f7;
+  border: 2px solid #0a0b10;
+  box-shadow: 0 0 8px rgba(122, 162, 247, 0.3);
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+input[type='range']::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 14px rgba(122, 162, 247, 0.5);
+  transform: scale(1.15);
+}
+
+input[type='range']:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+input[type='range']:disabled::-webkit-slider-thumb {
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+input[type='range']::-moz-range-track {
+  height: 4px;
+  background: #151923;
+  border-radius: 2px;
+  border: none;
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #7aa2f7;
+  border: 2px solid #0a0b10;
+  box-shadow: 0 0 8px rgba(122, 162, 247, 0.3);
+  cursor: pointer;
 }

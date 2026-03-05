@@ -80,41 +80,52 @@ export function Popup() {
   }
 
   const statusConfig: Record<InspectorStatus, { text: string; color: string }> = {
-    ready: { text: 'Ready', color: 'bg-gray-200 text-gray-700' },
-    inspecting: { text: 'Inspector active', color: 'bg-blue-100 text-blue-700' },
-    copied: { text: 'Copied!', color: 'bg-green-100 text-green-700' },
-    error: { text: 'Error', color: 'bg-red-100 text-red-700' },
+    ready: { text: '$ ready', color: 'border border-pablo-border bg-white/[0.03] text-pablo-muted' },
+    inspecting: { text: '$ inspecting...', color: 'border border-pablo-primary/30 bg-pablo-primary/10 text-pablo-primary' },
+    copied: { text: '$ copied!', color: 'border border-[#28c840]/30 bg-[#28c840]/10 text-[#28c840]' },
+    error: { text: '$ error', color: 'border border-pablo-error/30 bg-pablo-error/10 text-pablo-error' },
   };
 
   const { text: statusText, color: statusColor } = statusConfig[status];
 
   return (
-    <div className="p-4 space-y-4" style={{ minWidth: 320 }}>
+    <div className="p-4 space-y-3.5 bg-pablo-bg font-mono" style={{ minWidth: 320 }}>
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <img src={chrome.runtime.getURL('icons/logo.svg')} alt="Pablo" className="w-6 h-6" />
-          <h1 className="text-base font-semibold text-gray-900">Pablo</h1>
+          <img
+            src={chrome.runtime.getURL('icons/logo.svg')}
+            alt="Pablo"
+            className="w-5 h-5"
+            style={{ filter: 'brightness(0) invert(1)' }}
+          />
+          <h1 className="text-sm font-semibold tracking-tight text-pablo-text lowercase">pablo</h1>
         </div>
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor}`}>
+        <span className={`text-[10px] font-medium px-2 py-0.5 rounded ${statusColor}`}>
           {statusText}
         </span>
       </div>
 
+      <div className="dashed-separator" />
+
+      {/* Tech stack */}
       {stack && (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400">Detected:</span>
-          <span className="text-xs font-medium px-2 py-0.5 rounded bg-purple-100 text-purple-700">
+          <span className="text-[10px] text-pablo-dim">detected:</span>
+          <span className="text-[10px] font-medium px-2 py-0.5 border border-dashed border-pablo-accent/30 bg-pablo-accent/10 text-pablo-accent rounded-sm">
             {STACK_DISPLAY_NAMES[stack]}
           </span>
         </div>
       )}
 
+      {/* Mode toggle */}
       <ModeToggle mode={mode} onChange={setMode} disabled={isInspecting} />
 
+      {/* Capture context slider */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-gray-500">Capture context</span>
-          <span className="text-xs font-medium text-gray-700 capitalize">{captureContext}</span>
+          <span className="text-[11px] text-pablo-muted">capture context</span>
+          <span className="text-[11px] font-medium text-pablo-primary capitalize">{captureContext}</span>
         </div>
         <input
           type="range"
@@ -126,43 +137,52 @@ export function Popup() {
           disabled={isInspecting}
           className="w-full"
         />
-        <div className="flex justify-between text-[10px] text-gray-400">
-          <span>Minimal</span>
-          <span>Medium</span>
-          <span>Max</span>
+        <div className="flex justify-between text-[9px] text-pablo-dim">
+          <span>minimal</span>
+          <span>medium</span>
+          <span>max</span>
         </div>
       </div>
 
-      <p className="text-xs text-gray-500">
+      {/* Instructions */}
+      <p className="text-[11px] leading-relaxed text-pablo-dim">
         {mode === 'component'
-          ? 'Hover over elements to highlight them. Click to copy. Use arrow keys to navigate.'
-          : 'Captures the full visible page content.'}
+          ? 'hover over elements to highlight them. click to copy. use arrow keys to navigate.'
+          : 'captures the full visible page content.'}
       </p>
 
+      {/* Copy feedback */}
       {lastCopy && status === 'copied' && (
-        <div className="text-xs text-gray-500">
-          Copied &lt;{lastCopy.tag}&gt; — {(lastCopy.size / 1024).toFixed(1)} KB
+        <div className="text-[11px] text-[#28c840] animate-fade-in">
+          <span className="text-pablo-dim">$</span> copied &lt;{lastCopy.tag}&gt; — {(lastCopy.size / 1024).toFixed(1)} KB
         </div>
       )}
 
+      {/* Action button */}
       {isInspecting ? (
         <button
           onClick={handleStop}
-          className="w-full py-2 px-4 rounded-lg text-sm font-medium bg-red-500 text-white hover:bg-red-600 transition-colors"
+          className="w-full py-2.5 px-4 text-xs font-medium border border-pablo-error/40 bg-pablo-error/10 text-pablo-error hover:bg-pablo-error/20 hover:border-pablo-error/60 transition-all duration-150"
         >
-          Stop Inspecting
+          $ stop inspecting
         </button>
       ) : (
         <button
           onClick={handleStart}
-          className="w-full py-2 px-4 rounded-lg text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+          className="w-full py-2.5 px-4 text-xs font-medium border border-pablo-border text-pablo-text hover:shadow-glow-primary hover:border-pablo-border-hover transition-all duration-200"
+          style={{
+            backgroundImage: 'radial-gradient(200px 80px at 16% 50%, rgba(122, 162, 247, 0.14), transparent 78%), linear-gradient(#131722, #0f1219)',
+          }}
         >
-          Start Inspecting
+          <span className="text-pablo-primary mr-1.5">$</span>
+          start inspecting
         </button>
       )}
 
-      <div className="pt-2 border-t border-gray-100 text-center">
-        <span className="text-[10px] text-gray-400">
+      {/* Footer */}
+      <div className="dashed-separator" />
+      <div className="text-center">
+        <span className="text-[9px] text-pablo-dim">
           v{chrome.runtime.getManifest().version}
         </span>
       </div>
