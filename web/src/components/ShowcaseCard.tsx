@@ -15,7 +15,7 @@ export function ShowcaseCard({
   description: string;
   imagePath: string;
   lhsContent?: React.ReactNode;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }) {
   const [split, setSplit] = useState(50);
   const containerRef = useRef<HTMLDivElement>(null);

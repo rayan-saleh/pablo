@@ -9,8 +9,6 @@ export const MSG = {
   PROBE_REACT: 'PROBE_REACT',
   COLLECT_FIBER: 'COLLECT_FIBER',
   COLLECT_GSAP: 'COLLECT_GSAP',
-  COLLECT_MODULES: 'COLLECT_MODULES',
-  COLLECT_DOM_MUTATIONS: 'COLLECT_DOM_MUTATIONS',
   START_ANIMATION_CAPTURE: 'START_ANIMATION_CAPTURE',
   CONTENT_SCRIPT_READY: 'CONTENT_SCRIPT_READY',
   CONTINUE_CAPTURE: 'CONTINUE_CAPTURE',
@@ -56,14 +54,6 @@ export type CollectGsapMsg = {
   type: typeof MSG.COLLECT_GSAP;
 };
 
-export type CollectModulesMsg = {
-  type: typeof MSG.COLLECT_MODULES;
-};
-
-export type CollectDomMutationsMsg = {
-  type: typeof MSG.COLLECT_DOM_MUTATIONS;
-};
-
 export type StartAnimationCaptureMsg = {
   type: typeof MSG.START_ANIMATION_CAPTURE;
   fingerprint: ElementFingerprint;
@@ -103,8 +93,6 @@ export type ExtensionMessage =
   | ProbeReactMsg
   | CollectFiberMsg
   | CollectGsapMsg
-  | CollectModulesMsg
-  | CollectDomMutationsMsg
   | StartAnimationCaptureMsg
   | ContentScriptReadyMsg
   | ContinueCaptureMsg

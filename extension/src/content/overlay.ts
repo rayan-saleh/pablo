@@ -1,17 +1,19 @@
-import type { InspectorMode, TechStack, ClipboardPayload, StrategyKey, ComponentData, ComponentTree, AnimationData, FramerMotionData, GsapData, DomMutationRecording, SemanticHint, InteractionPattern, ModuleDependency, ElementFingerprint, CaptureContextLevel } from '../shared/types';
+import type { InspectorMode, TechStack, ClipboardPayload, StrategyKey, ComponentData, ComponentTree, AnimationData, FramerMotionData, GsapData, SemanticHint, InteractionPattern, ElementFingerprint, CaptureContextLevel } from '../shared/types';
 import { REACT_BASED_STACKS } from '../shared/types';
+import { DEFAULT_CAPTURE_CONTEXT, getCapturePlan } from '../shared/capture-policy';
 import { detectStack, probeReactViaServiceWorker } from './detector';
 import { extractElement, getStrategy } from './extractor';
 import { extractAnimations, mergeAnimationData } from './animation-extractor';
 import { extractFonts } from './font-extractor';
 import { recordMutations } from './mutation-recorder';
 import { MSG } from '../shared/messages';
-import { startFullCapture, continueCapture } from './capture-orchestrator';
+import { copyPayloadToClipboard, startFullCapture, continueCapture } from './capture-orchestrator';
 import { buildLlmBundle } from './llm-bundle';
+import { buildRelativeSelectorPath, buildSummarySelector } from '../shared/selector-paths';
 
 let active = false;
 let mode: InspectorMode = 'component';
-let captureContext: CaptureContextLevel = 'medium';
+let captureContext: CaptureContextLevel = DEFAULT_CAPTURE_CONTEXT;
 let currentTarget: Element | null = null;
 let detectedStack: TechStack = 'generic';
 
@@ -169,11 +171,7 @@ function getStrategyKey(stack: TechStack): StrategyKey {
 }
 
 function buildSelector(el: Element): string {
-  const tag = el.tagName.toLowerCase();
-  const cls = el.className && typeof el.className === 'string'
-    ? '.' + el.className.trim().split(/\s+/).join('.')
-    : '';
-  return `${tag}${cls}`;
+  return buildSummarySelector(el, Number.MAX_SAFE_INTEGER);
 }
 
 function normalizeBoundary(el: Element): Element {
@@ -232,16 +230,12 @@ function chooseExtractionTarget(
   contextLevel: CaptureContextLevel,
 ): Element {
   const expanded = strategy.expandSelection(clickedTarget);
-  if (contextLevel === 'minimal') {
-    return expanded;
-  }
-
   const normalized = normalizeBoundary(expanded);
-  if (contextLevel === 'medium') {
+  if (contextLevel === 'basic') {
     return normalized;
   }
 
-  // Max: allow one stronger climb to include nearby context around the component.
+  // Deep: allow one stronger climb to include nearby context around the component.
   let best = normalized;
   let current: Element | null = normalized.parentElement;
   let depth = 0;
@@ -256,35 +250,6 @@ function chooseExtractionTarget(
     depth++;
   }
   return best;
-}
-
-function compressPageLoadMutations(raw: any[], contextLevel: CaptureContextLevel): any[] {
-  if (raw.length <= 1) return raw;
-
-  const deduped: any[] = [];
-  let prevKey = '';
-  for (const m of raw) {
-    const key = `${m.ts}|${m.type}|${m.target}|${m.old ?? ''}|${m.new ?? ''}`;
-    if (key === prevKey) continue;
-    deduped.push(m);
-    prevKey = key;
-  }
-
-  const MAX_KEEP = contextLevel === 'minimal' ? 90 : contextLevel === 'max' ? 320 : 180;
-  if (deduped.length <= MAX_KEEP) return deduped;
-
-  const headCount = 40;
-  const tailCount = 40;
-  const middle = deduped.slice(headCount, deduped.length - tailCount);
-  const maxMiddle = MAX_KEEP - headCount - tailCount;
-  const step = Math.max(1, Math.ceil(middle.length / maxMiddle));
-  const sampledMiddle = middle.filter((_m, i) => i % step === 0).slice(0, maxMiddle);
-
-  return [
-    ...deduped.slice(0, headCount),
-    ...sampledMiddle,
-    ...deduped.slice(deduped.length - tailCount),
-  ];
 }
 
 /**
@@ -328,24 +293,6 @@ function collectGsapViaServiceWorker(target: Element): Promise<GsapData | null> 
 }
 
 /**
- * Request page-load DOM mutation data from the service worker (runs in main world).
- * Marks the target element so collection is scoped to its subtree.
- */
-function collectDomMutationsViaServiceWorker(target: Element): Promise<any[] | null> {
-  return new Promise((resolve) => {
-    target.setAttribute('data-pablo-target-dom', '1');
-    chrome.runtime.sendMessage({ type: MSG.COLLECT_DOM_MUTATIONS }, (response) => {
-      target.removeAttribute('data-pablo-target-dom');
-      if (chrome.runtime.lastError) {
-        resolve(null);
-        return;
-      }
-      resolve(response?.data ?? null);
-    });
-  });
-}
-
-/**
  * Build a component tree from flat sorted components array.
  */
 function buildComponentTree(components: ComponentData[], rootName: string): ComponentTree | undefined {
@@ -370,66 +317,10 @@ function buildComponentTree(components: ComponentData[], rootName: string): Comp
   return build(rootName);
 }
 
-/**
- * Request webpack module dependency resolution from the service worker.
- * Must be called after fiber collection (needs __pablo_last_fiber_data in main world).
- */
-function collectModulesViaServiceWorker(): Promise<{
-  displayName: string;
-  dependencies: ModuleDependency[];
-}[] | null> {
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: MSG.COLLECT_MODULES }, (response) => {
-      if (chrome.runtime.lastError) {
-        resolve(null);
-        return;
-      }
-      resolve(response?.data ?? null);
-    });
-  });
-}
-
-/**
- * Merge resolved module dependencies into a component tree.
- * Walks the tree and attaches deps to nodes matching by displayName.
- */
-function mergeDependenciesIntoTree(
-  tree: ComponentTree,
-  moduleDeps: { displayName: string; dependencies: ModuleDependency[] }[],
-): void {
-  const depMap = new Map<string, ModuleDependency[]>();
-  for (const entry of moduleDeps) {
-    depMap.set(entry.displayName, entry.dependencies);
-  }
-
-  function walk(node: ComponentTree): void {
-    const deps = depMap.get(node.name);
-    if (deps) {
-      node.dependencies = deps;
-    }
-    for (const child of node.children) {
-      walk(child);
-    }
-  }
-
-  walk(tree);
-}
-
 // --- Semantic Analysis ---
 
 function buildRelativeSelector(root: Element, target: Element): string {
-  const parts: string[] = [];
-  let current: Element | null = target;
-  while (current && current !== root) {
-    const parent: Element | null = current.parentElement;
-    if (!parent) break;
-    const siblings = Array.from(parent.children);
-    const index = siblings.indexOf(current) + 1;
-    const tag = current.tagName.toLowerCase();
-    parts.unshift(`${tag}:nth-child(${index})`);
-    current = parent;
-  }
-  return parts.join(' > ') || target.tagName.toLowerCase();
+  return buildRelativeSelectorPath(root, target, 'nth-child');
 }
 
 function inferSemanticRoles(element: Element): SemanticHint[] {
@@ -651,65 +542,43 @@ async function handleExtraction(target: Element): Promise<void> {
   showExtracting();
   try {
     const strategy = getStrategy(detectedStack);
+    const capturePlan = getCapturePlan(captureContext);
     const extractionTarget = chooseExtractionTarget(target, strategy, captureContext);
 
-    // Start mutation recording immediately (runs for 3s in background)
-    const mutationPromise = recordMutations(extractionTarget, 3000);
+    const mutationPromise = capturePlan.includeMutationRecording
+      ? recordMutations(extractionTarget, 3000)
+      : Promise.resolve(undefined);
 
-    // Always extract HTML (styled)
     const html = extractElement(extractionTarget, detectedStack);
 
-    // Extract animations (universal CSS layer)
     let animations: AnimationData | undefined = extractAnimations(extractionTarget);
     console.log('[Pablo] Animation extraction:', animations ? 'data found' : 'none');
 
-    // Run strategy-specific animation extraction
     if (strategy.extractAnimations) {
       const strategyAnimations = strategy.extractAnimations(extractionTarget);
       animations = mergeAnimationData(animations, strategyAnimations);
     }
 
-    // Collect GSAP data from main world (works for all stacks)
-    const gsapData = await collectGsapViaServiceWorker(extractionTarget);
-    if (gsapData) {
-      console.log('[Pablo] GSAP data found:', gsapData.version || 'detected',
-        'scrollTriggers:', gsapData.scrollTriggers.length, 'tweens:', gsapData.tweens.length);
-      if (gsapData.timelineTree) {
-        console.log('[Pablo] GSAP timeline tree captured, children:', gsapData.timelineTree.children.length);
+    if (capturePlan.includeGsap) {
+      const gsapData = await collectGsapViaServiceWorker(extractionTarget);
+      if (gsapData) {
+        console.log(
+          '[Pablo] GSAP data found:',
+          gsapData.version || 'detected',
+          'scrollTriggers:',
+          gsapData.scrollTriggers.length,
+          'tweens:',
+          gsapData.tweens.length,
+        );
+        if (gsapData.timelineTree) {
+          console.log('[Pablo] GSAP timeline tree captured, children:', gsapData.timelineTree.children.length);
+        }
+        animations = mergeAnimationData(animations, { gsap: gsapData });
       }
-      animations = mergeAnimationData(animations, { gsap: gsapData });
     }
 
-    // Collect page-load DOM mutations from main world
-    const pageLoadMutations = await collectDomMutationsViaServiceWorker(extractionTarget);
-    if (pageLoadMutations && pageLoadMutations.length > 0) {
-      const compressedPageLoadMutations = compressPageLoadMutations(pageLoadMutations, captureContext);
-      console.log('[Pablo] Page-load mutations:', pageLoadMutations.length, 'compressed to', compressedPageLoadMutations.length);
-      const plRecording: DomMutationRecording = {
-        duration: pageLoadMutations[pageLoadMutations.length - 1].ts - pageLoadMutations[0].ts,
-        mutations: compressedPageLoadMutations.map((m: any) => {
-          let changes: Record<string, string>;
-          if (m.type === 'text' || m.type === 'style') {
-            changes = { old: m.old, new: m.new };
-          } else {
-            changes = {};
-            if (m.added) changes.added = m.added.join(', ');
-            if (m.removed) changes.removed = m.removed.join(', ');
-          }
-          return {
-            timestamp: m.ts,
-            type: m.type,
-            target: m.target,
-            changes,
-          };
-        }),
-      };
-      animations = mergeAnimationData(animations, { pageLoadRecording: plRecording });
-    }
-
-    // Attempt fiber collection for React-based sites
     let tree: ComponentTree | undefined;
-    if (REACT_BASED_STACKS.has(detectedStack) || detectedStack === 'framer') {
+    if (capturePlan.includeReactTree && (REACT_BASED_STACKS.has(detectedStack) || detectedStack === 'framer')) {
       console.log('[Pablo] Attempting fiber collection via service worker');
       const fiberData = await collectFiberViaServiceWorker(extractionTarget);
       if (fiberData) {
@@ -723,39 +592,39 @@ async function handleExtraction(target: Element): Promise<void> {
             framerMotion: fiberData.motionComponents,
           });
         }
-
-        // Resolve webpack module dependencies for component source code
-        const moduleDeps = await collectModulesViaServiceWorker();
-        if (moduleDeps && tree) {
-          console.log('[Pablo] Module dependencies resolved for', moduleDeps.length, 'component(s)');
-          mergeDependenciesIntoTree(tree, moduleDeps);
-        }
       } else {
         console.log('[Pablo] Fiber collection returned null, using HTML only');
       }
     }
 
-    // Infer semantic roles
     const semanticHints = inferSemanticRoles(extractionTarget);
-
-    // Detect interaction patterns
     const interactionPatterns = detectInteractionPatterns(extractionTarget);
-
-    // Extract font data
     const fonts = extractFonts(extractionTarget);
     console.log('[Pablo] Font extraction:', fonts.fontFaces.length, 'font-faces,', fonts.pseudoContent.length, 'pseudo-elements');
-
-    // Generate summary
     const summary = generateComponentSummary(extractionTarget, semanticHints);
 
-    // Await mutation recording and merge into animations
     const domRecording = await mutationPromise;
     if (domRecording) {
       console.log('[Pablo] DOM mutation recording:', domRecording.mutations.length, 'mutations');
       animations = mergeAnimationData(animations, { domRecording });
     }
 
-    // Build clipboard payload
+    const selector = buildSelector(extractionTarget);
+    const llmBundle = capturePlan.includeLlmBundle
+      ? buildLlmBundle({
+        target: extractionTarget,
+        selector,
+        strategy: getStrategyKey(detectedStack),
+        framework: detectedStack,
+        captureContext,
+        styledHtml: html,
+        animations,
+        semanticHints,
+        interactionPatterns,
+        fonts,
+      })
+      : undefined;
+
     const payload: ClipboardPayload = {
       source: {
         url: window.location.href,
@@ -768,7 +637,7 @@ async function handleExtraction(target: Element): Promise<void> {
         strategy: getStrategyKey(detectedStack),
       },
       component: {
-        selector: buildSelector(extractionTarget),
+        selector,
         tag: extractionTarget.tagName.toLowerCase(),
         html,
         ...(tree ? { tree } : {}),
@@ -776,30 +645,23 @@ async function handleExtraction(target: Element): Promise<void> {
         ...(semanticHints.length > 0 ? { semanticHints } : {}),
         ...(interactionPatterns.length > 0 ? { interactionPatterns } : {}),
         ...(fonts && (fonts.fontFaces.length > 0 || fonts.pseudoContent.length > 0) ? { fonts } : {}),
-        llm: buildLlmBundle({
-          target: extractionTarget,
-          selector: buildSelector(extractionTarget),
-          strategy: getStrategyKey(detectedStack),
-          framework: detectedStack,
-          captureContext,
-          styledHtml: html,
-          animations,
-          semanticHints,
-          interactionPatterns,
-          fonts,
-        }),
+        ...(llmBundle ? { llm: llmBundle } : {}),
         summary,
       },
     };
 
-    // Start the full animation capture pipeline (refresh + entrance + scroll + interaction)
-    hideExtracting(false);
-    showCaptureProgress('Starting animation capture…');
+    if (capturePlan.runPostReloadAnimationCapture) {
+      hideExtracting(false);
+      showCaptureProgress('Starting animation capture…');
+      startFullCapture(extractionTarget, payload, (phase) => {
+        updateCapturePhase(phase);
+      });
+      return;
+    }
 
-    startFullCapture(extractionTarget, payload, (phase) => {
-      updateCapturePhase(phase);
-    });
-    // The page will now refresh. continueCapture will be called after refresh via handleContinueCapture.
+    await copyPayloadToClipboard(payload);
+    hideExtracting();
+    flashGreen();
   } catch (err) {
     hideExtracting();
     if (labelEl) {
@@ -976,7 +838,10 @@ function onKeyDown(e: KeyboardEvent): void {
 
 // --- Public API ---
 
-export async function activate(newMode: InspectorMode, newCaptureContext: CaptureContextLevel = 'medium'): Promise<void> {
+export async function activate(
+  newMode: InspectorMode,
+  newCaptureContext: CaptureContextLevel = DEFAULT_CAPTURE_CONTEXT,
+): Promise<void> {
   console.log('[Pablo] Overlay activate, mode:', newMode, 'captureContext:', newCaptureContext);
   if (active) deactivate();
 

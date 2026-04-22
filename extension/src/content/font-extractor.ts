@@ -1,4 +1,5 @@
 import type { FontData, FontFaceData, PseudoContent } from '../shared/types';
+import { buildRelativeSelectorPath } from '../shared/selector-paths';
 
 /**
  * Normalize a font-family name by stripping quotes and trimming whitespace.
@@ -11,18 +12,7 @@ function normalizeFontName(name: string): string {
  * Build a relative CSS selector path from root to target element.
  */
 function buildRelativeSelector(root: Element, target: Element): string {
-  const parts: string[] = [];
-  let current: Element | null = target;
-  while (current && current !== root) {
-    const parent: Element | null = current.parentElement;
-    if (!parent) break;
-    const siblings = Array.from(parent.children);
-    const index = siblings.indexOf(current) + 1;
-    const tag = current.tagName.toLowerCase();
-    parts.unshift(`${tag}:nth-child(${index})`);
-    current = parent;
-  }
-  return parts.join(' > ') || target.tagName.toLowerCase();
+  return buildRelativeSelectorPath(root, target, 'nth-child');
 }
 
 /**

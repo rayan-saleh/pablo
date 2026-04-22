@@ -1,5 +1,6 @@
 import type { InteractionAnimationData, ActiveAnimationData, DomMutationRecord, ComputedStyleDiff } from '../shared/types';
 import { compressMutations } from './mutation-recorder';
+import { buildSummarySelector } from '../shared/selector-paths';
 
 const TRACKED_STYLE_PROPERTIES = [
   'opacity', 'transform', 'visibility', 'background-color', 'color',
@@ -8,12 +9,7 @@ const TRACKED_STYLE_PROPERTIES = [
 ];
 
 function buildSelector(el: Element): string {
-  const tag = el.tagName.toLowerCase();
-  if (el.id) return `${tag}#${el.id}`;
-  const cls = el.className && typeof el.className === 'string'
-    ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.')
-    : '';
-  return `${tag}${cls}` || tag;
+  return buildSummarySelector(el);
 }
 
 function snapshotStyles(el: Element): Map<string, string> {

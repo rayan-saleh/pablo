@@ -8,6 +8,7 @@ import type {
   StrategyKey,
   TechStack,
 } from '../shared/types';
+import { buildRelativeSelectorPath } from '../shared/selector-paths';
 
 interface LlmCaptureLimits {
   maxScanNodes: number;
@@ -21,17 +22,7 @@ interface LlmCaptureLimits {
 }
 
 const LIMITS_BY_CONTEXT: Record<CaptureContextLevel, LlmCaptureLimits> = {
-  minimal: {
-    maxScanNodes: 220,
-    maxClassTokens: 160,
-    maxCssRules: 120,
-    maxCssTextChars: 50_000,
-    maxAuthoredHtmlChars: 60_000,
-    maxInteractiveSelectors: 24,
-    maxImageUrls: 48,
-    maxFontFamilies: 20,
-  },
-  medium: {
+  basic: {
     maxScanNodes: 500,
     maxClassTokens: 400,
     maxCssRules: 300,
@@ -41,7 +32,7 @@ const LIMITS_BY_CONTEXT: Record<CaptureContextLevel, LlmCaptureLimits> = {
     maxImageUrls: 120,
     maxFontFamilies: 40,
   },
-  max: {
+  deep: {
     maxScanNodes: 1100,
     maxClassTokens: 900,
     maxCssRules: 700,
@@ -419,20 +410,7 @@ function collectAriaRoles(elements: Element[]): string[] {
 }
 
 function relativeSelector(root: Element, target: Element): string {
-  if (root === target) return root.tagName.toLowerCase();
-  const parts: string[] = [];
-  let current: Element | null = target;
-  while (current && current !== root) {
-    const parent: Element | null = current.parentElement;
-    if (!parent) break;
-    const currentTag = current.tagName;
-    const siblings: Element[] = Array.from(parent.children).filter((s: Element) => s.tagName === currentTag);
-    const index = siblings.indexOf(current) + 1;
-    const tag = current.tagName.toLowerCase();
-    parts.unshift(`${tag}:nth-of-type(${Math.max(index, 1)})`);
-    current = parent;
-  }
-  return parts.join(' > ');
+  return buildRelativeSelectorPath(root, target, 'nth-of-type');
 }
 
 function collectImageUrls(root: Element, maxImageUrls: number): string[] {

@@ -46,7 +46,7 @@ function GitHubIcon({ className = "h-4 w-4" }: { className?: string }) {
 function Nav() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/[0.08] bg-[#0a0b10]/90 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+      <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
         <a href="/" className="flex items-center gap-2.5">
           <svg className="h-6 w-6 text-[#f4f7fb]" viewBox="0 0 100 100" fill="currentColor">
             <path fillRule="evenodd" d="M50 4C25 5 8 24 8 48c0 26 19 46 42 48 23-2 42-22 42-48C92 24 75 3 50 4zm0 8c20 1 34 16 34 36 0 22-15 38-34 40C30 86 16 70 16 48 16 28 30 13 50 12z"/>
@@ -83,7 +83,7 @@ function Nav() {
 function Footer() {
   return (
     <footer className="border-t border-dashed border-white/[0.1] py-10">
-      <div className="mx-auto flex max-w-6xl flex-col items-center gap-5 px-6 text-xs text-[#a0a8b8]">
+      <div className="mx-auto flex max-w-5xl flex-col items-center gap-5 px-6 text-xs text-[#a0a8b8]">
         <div className="flex items-center gap-2">
           <svg className="h-4 w-4 text-[#d9dee7]" viewBox="0 0 100 100" fill="currentColor">
             <path fillRule="evenodd" d="M50 4C25 5 8 24 8 48c0 26 19 46 42 48 23-2 42-22 42-48C92 24 75 3 50 4zm0 8c20 1 34 16 34 36 0 22-15 38-34 40C30 86 16 70 16 48 16 28 30 13 50 12z"/>

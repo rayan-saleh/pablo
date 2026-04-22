@@ -1,4 +1,5 @@
 import type { DomMutationRecord, DomMutationRecording } from '../shared/types';
+import { buildSummarySelector } from '../shared/selector-paths';
 
 // --- Mutation Compression ---
 
@@ -101,12 +102,7 @@ const MAX_MUTATIONS = 200;
 const TRACKED_ATTRIBUTES = new Set(['style', 'class', 'data-state', 'aria-hidden']);
 
 function buildSelector(el: Element): string {
-  const tag = el.tagName.toLowerCase();
-  if (el.id) return `${tag}#${el.id}`;
-  const cls = el.className && typeof el.className === 'string'
-    ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.')
-    : '';
-  return `${tag}${cls}` || tag;
+  return buildSummarySelector(el);
 }
 
 /**

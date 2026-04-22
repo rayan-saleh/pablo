@@ -398,9 +398,6 @@ function generateSummary(data: Partial<AnimationData>): string {
     if (data.gsap.tweens.length > 0) {
       gsapParts.push(`${data.gsap.tweens.length} active tween(s)`);
     }
-    if (data.gsap.recordedTweens && data.gsap.recordedTweens.length > 0) {
-      gsapParts.push(`${data.gsap.recordedTweens.length} recorded tween(s)`);
-    }
     if (data.gsap.timelineTree) {
       gsapParts.push(`timeline tree captured (${data.gsap.timelineTree.children.length} children)`);
     }
@@ -409,16 +406,6 @@ function generateSummary(data: Partial<AnimationData>): string {
 
   if (data.domRecording) {
     parts.push(`DOM mutation recording: ${data.domRecording.mutations.length} mutation(s) over ${data.domRecording.duration}ms`);
-  }
-
-  if (data.pageLoadRecording) {
-    const mutations = data.pageLoadRecording.mutations;
-    const textChanges = mutations.filter(m => m.type === 'text' || m.type === 'childList');
-    const styleChanges = mutations.filter(m => m.type === 'style');
-    const parts2: string[] = [];
-    if (textChanges.length > 0) parts2.push(`${textChanges.length} text change(s)`);
-    if (styleChanges.length > 0) parts2.push(`${styleChanges.length} style change(s)`);
-    parts.push(`Page-load animation recording: ${parts2.join(', ')} over ${data.pageLoadRecording.duration}ms`);
   }
 
   if (data.entranceAnimations) {
@@ -580,9 +567,6 @@ export function mergeAnimationData(
   if (partial.domRecording) {
     merged.domRecording = partial.domRecording;
   }
-  if (partial.pageLoadRecording) {
-    merged.pageLoadRecording = partial.pageLoadRecording;
-  }
   if (partial.entranceAnimations) {
     merged.entranceAnimations = partial.entranceAnimations;
   }
@@ -605,7 +589,6 @@ export function mergeAnimationData(
     merged.webflowIX2.length > 0 ||
     merged.gsap?.detected ||
     merged.domRecording ||
-    merged.pageLoadRecording ||
     merged.entranceAnimations ||
     merged.scrollAnimations ||
     merged.interactionAnimations;

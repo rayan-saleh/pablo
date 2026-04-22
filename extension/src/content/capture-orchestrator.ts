@@ -1,11 +1,8 @@
 import type {
   ElementFingerprint,
   ClipboardPayload,
-  AnimationData,
   EntranceAnimationData,
   ActiveAnimationData,
-  DomMutationRecord,
-  ComputedStyleDiff,
 } from '../shared/types';
 import { MSG } from '../shared/messages';
 import { buildElementFingerprint, resolveElementFingerprint } from './element-fingerprint';
@@ -111,11 +108,11 @@ export function startFullCapture(
     type: MSG.START_ANIMATION_CAPTURE,
     fingerprint,
     immediatePayload,
-    url: window.location.href,
+      url: window.location.href,
   }, (response) => {
     if (chrome.runtime.lastError || !response?.ok) {
       console.warn('[Pablo] Failed to start animation capture, using immediate data');
-      copyPayload(immediatePayload);
+      void copyPayloadToClipboard(immediatePayload);
     }
   });
 }
@@ -151,7 +148,7 @@ export async function continueCapture(
     if (!target) {
       console.warn('[Pablo] Element not found after refresh, using immediate data only');
       onPhase?.('Element not found — using immediate data');
-      await copyPayload(immediatePayload);
+      await copyPayloadToClipboard(immediatePayload);
       return;
     }
 
@@ -220,14 +217,14 @@ export async function continueCapture(
       },
     };
 
-    await copyPayload(finalPayload);
+    await copyPayloadToClipboard(finalPayload);
     onPhase?.('Copied!');
     console.log('[Pablo] Full capture complete');
 
   } catch (err) {
     console.error('[Pablo] Continue capture failed:', err);
     onPhase?.('Error — using immediate data');
-    await copyPayload(immediatePayload);
+    await copyPayloadToClipboard(immediatePayload);
   }
 }
 
@@ -303,7 +300,7 @@ function stripDefaultTimingValues(payload: ClipboardPayload): ClipboardPayload {
   };
 }
 
-async function copyPayload(payload: ClipboardPayload): Promise<void> {
+export async function copyPayloadToClipboard(payload: ClipboardPayload): Promise<void> {
   const stripped = stripDefaultTimingValues(payload);
   const payloadStr = JSON.stringify(stripped, cleanReplacer);
   await navigator.clipboard.writeText(payloadStr);

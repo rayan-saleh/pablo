@@ -33,7 +33,7 @@ export const REACT_BASED_STACKS = new Set<TechStack>(['react', 'nextjs', 'gatsby
 export type InspectorMode = 'component' | 'page';
 
 export type InspectorStatus = 'ready' | 'inspecting' | 'copied' | 'error';
-export type CaptureContextLevel = 'minimal' | 'medium' | 'max';
+export type CaptureContextLevel = 'basic' | 'deep';
 
 export interface ExtractionMeta {
   tag: string;
@@ -139,19 +139,6 @@ export interface GsapTweenInfo {
   ease?: string;
 }
 
-export interface GsapRecordedTweenInfo {
-  type: string;
-  target: string;
-  properties: Record<string, unknown>;
-  fromProperties?: Record<string, unknown>;
-  duration?: number;
-  delay?: number;
-  ease?: string;
-  stagger?: unknown;
-  timelinePosition?: string | number;
-  parentTimelineId?: string;
-}
-
 export interface GsapTimelineChild {
   type: 'tween' | 'timeline' | 'callback' | 'label';
   target?: string;
@@ -177,7 +164,6 @@ export interface GsapData {
   version?: string;
   scrollTriggers: GsapScrollTriggerInfo[];
   tweens: GsapTweenInfo[];
-  recordedTweens?: GsapRecordedTweenInfo[];
   timelineTree?: GsapTimelineTree;
 }
 
@@ -248,7 +234,6 @@ export interface AnimationData {
   webflowIX2: WebflowIX2Data[];
   gsap?: GsapData;
   domRecording?: DomMutationRecording;
-  pageLoadRecording?: DomMutationRecording;
   entranceAnimations?: EntranceAnimationData;
   scrollAnimations?: ScrollAnimationData;
   interactionAnimations?: InteractionAnimationData;
@@ -261,18 +246,11 @@ export interface FiberInstanceData {
   props: Record<string, unknown>;
 }
 
-export interface ModuleDependency {
-  id: string;
-  source: string;
-  importedAs?: string;
-}
-
 export interface ComponentData {
   displayName: string;
   sourceCode: string;
   instances: FiberInstanceData[];
   children: string[];
-  dependencies?: ModuleDependency[];
 }
 
 export interface ComponentTree {
@@ -280,7 +258,6 @@ export interface ComponentTree {
   sourceCode: string;
   instances: FiberInstanceData[];
   children: ComponentTree[];
-  dependencies?: ModuleDependency[];
 }
 
 // --- Semantic & Interaction Types ---

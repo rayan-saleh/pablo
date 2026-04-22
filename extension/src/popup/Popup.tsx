@@ -2,23 +2,24 @@ import React, { useState, useEffect } from 'react';
 import type { InspectorMode, InspectorStatus, TechStack, CaptureContextLevel } from '../shared/types';
 import { STACK_DISPLAY_NAMES } from '../shared/types';
 import { MSG, type ExtensionMessage } from '../shared/messages';
+import { DEFAULT_CAPTURE_CONTEXT } from '../shared/capture-policy';
 import { ModeToggle } from './components/ModeToggle';
 
 const CAPTURE_CONTEXT_STORAGE_KEY = 'captureContextLevel';
-const CAPTURE_LEVELS: CaptureContextLevel[] = ['minimal', 'medium', 'max'];
+const CAPTURE_LEVELS: CaptureContextLevel[] = ['basic', 'deep'];
 
 export function Popup() {
   const [mode, setMode] = useState<InspectorMode>('component');
   const [status, setStatus] = useState<InspectorStatus>('ready');
   const [stack, setStack] = useState<TechStack | null>(null);
   const [lastCopy, setLastCopy] = useState<{ tag: string; size: number } | null>(null);
-  const [captureContext, setCaptureContext] = useState<CaptureContextLevel>('medium');
+  const [captureContext, setCaptureContext] = useState<CaptureContextLevel>(DEFAULT_CAPTURE_CONTEXT);
 
   useEffect(() => {
     chrome.storage.local.get(CAPTURE_CONTEXT_STORAGE_KEY, (result) => {
       void chrome.runtime.lastError;
       const saved = result?.[CAPTURE_CONTEXT_STORAGE_KEY];
-      if (saved === 'minimal' || saved === 'medium' || saved === 'max') {
+      if (saved === 'basic' || saved === 'deep') {
         setCaptureContext(saved);
       }
     });
@@ -130,7 +131,7 @@ export function Popup() {
         <input
           type="range"
           min={0}
-          max={2}
+          max={1}
           step={1}
           value={captureLevelIndex}
           onChange={(e) => handleCaptureLevelChange(Number(e.target.value))}
@@ -138,9 +139,8 @@ export function Popup() {
           className="w-full"
         />
         <div className="flex justify-between text-[9px] text-pablo-dim">
-          <span>minimal</span>
-          <span>medium</span>
-          <span>max</span>
+          <span>basic</span>
+          <span>deep</span>
         </div>
       </div>
 

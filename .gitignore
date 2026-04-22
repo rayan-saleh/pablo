@@ -6,3 +6,5 @@ dist
 *.local
 .env
 .env.*
+.omc/
+.omx/

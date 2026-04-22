@@ -19,7 +19,7 @@
     "128": "icons/icon-128.png"
   },
   "background": {
-    "service_worker": "src/background/service-worker.ts",
+    "service_worker": "src/background/main.ts",
     "type": "module"
   },
   "content_scripts": [

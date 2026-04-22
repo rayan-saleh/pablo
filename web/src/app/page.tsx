@@ -4,7 +4,6 @@ import { StripeMock } from "@/components/mocks/StripeMock";
 import { LinearMock } from "@/components/mocks/LinearMock";
 import { WebflowMock } from "@/components/mocks/WebflowMock";
 import { FramerMock } from "@/components/mocks/FramerMock";
-import { AllbirdsMock } from "@/components/mocks/AllbirdsMock";
 import { FloatingIconsHeroMock } from "@/components/mocks/FloatingIconsHeroMock";
 import { FloatingIconsHeroCopied } from "@/components/mocks/FloatingIconsHeroCopied";
 import { DotTxtHeroMock } from "@/components/mocks/DotTxtHeroMock";
@@ -17,7 +16,13 @@ function GitHubIcon({ className = "h-5 w-5" }: { className?: string }) {
   );
 }
 
-const showcaseItems = [
+const showcaseItems: Array<{
+  siteName: string;
+  strategy: string;
+  description: string;
+  imagePath: string;
+  Mock?: React.ComponentType;
+}> = [
   {
     siteName: "Stripe",
     strategy: "generic",
@@ -45,13 +50,6 @@ const showcaseItems = [
     description: "Expert carousel, spring transitions, GSAP scroll-reveal",
     imagePath: "/showcase/framer.png",
     Mock: FramerMock,
-  },
-  {
-    siteName: "Allbirds",
-    strategy: "shopify",
-    description: "Product cards, variant selectors, image galleries",
-    imagePath: "/showcase/allbirds.png",
-    Mock: AllbirdsMock,
   },
   {
     siteName: ".txt",
@@ -106,14 +104,14 @@ export default function Home() {
           <div className="absolute right-[16%] top-[12%] h-[256px] w-[416px] rounded-full bg-[rgba(155,116,255,0.05)] blur-[80px]" />
         </div>
 
-        <div className="mx-auto max-w-3xl px-6">
-          <h1 className="max-w-[420px] text-[clamp(2.5rem,5vw,3.6rem)] font-semibold leading-[1.02] tracking-[-1.7px] text-[#f4f7fb]">
+        <div className="mx-auto max-w-5xl px-6">
+          <h1 className="text-[clamp(2.5rem,5vw,3.6rem)] font-semibold leading-[1.02] tracking-[-1.7px] text-[#f4f7fb]">
             Copy any component from the web.
           </h1>
-          <p className="mt-5 max-w-[380px] text-xl font-semibold leading-[1.5] text-[#c8ced8]">
+          <p className="mt-5 text-xl font-semibold leading-[1.5] text-[#c8ced8]">
             Hover. Click. Paste. Done.
           </p>
-          <p className="mt-4 max-w-[380px] text-sm leading-6 text-[#a0a8b8]">
+          <p className="mt-4 text-sm leading-6 text-[#a0a8b8]">
             Pablo captures production-ready HTML&nbsp;+ CSS from any website
             and puts it on your clipboard. Fonts, animations, and all.
           </p>
@@ -148,7 +146,7 @@ export default function Home() {
           </div>
 
           {/* Video embed */}
-          <div className="mt-12 max-w-2xl">
+          <div className="mt-12">
             <VideoEmbed videoSrc="/demo.mp4" />
           </div>
         </div>
@@ -198,7 +196,7 @@ export default function Home() {
           <div className="flex flex-col gap-3">
             {showcaseItems.map(({ Mock, ...item }) => (
               <ShowcaseCard key={item.siteName} {...item}>
-                <Mock />
+                {Mock ? <Mock /> : null}
               </ShowcaseCard>
             ))}
             <ShowcaseCard
