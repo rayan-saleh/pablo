@@ -15,6 +15,7 @@ export const MSG = {
   CAPTURE_PHASE_UPDATE: 'CAPTURE_PHASE_UPDATE',
   COLLECT_ENTRANCE_ANIMATIONS: 'COLLECT_ENTRANCE_ANIMATIONS',
   COLLECT_INTERSECTION_DATA: 'COLLECT_INTERSECTION_DATA',
+  CAPTURE_SCREENSHOT: 'CAPTURE_SCREENSHOT',
 } as const;
 
 export type ActivateInspectorMsg = {
@@ -84,6 +85,12 @@ export type CollectIntersectionDataMsg = {
   type: typeof MSG.COLLECT_INTERSECTION_DATA;
 };
 
+export type CaptureScreenshotMsg = {
+  type: typeof MSG.CAPTURE_SCREENSHOT;
+  rect: { x: number; y: number; width: number; height: number };
+  dpr: number;
+};
+
 export type ExtensionMessage =
   | ActivateInspectorMsg
   | DeactivateInspectorMsg
@@ -98,4 +105,5 @@ export type ExtensionMessage =
   | ContinueCaptureMsg
   | CapturePhaseUpdateMsg
   | CollectEntranceAnimationsMsg
-  | CollectIntersectionDataMsg;
+  | CollectIntersectionDataMsg
+  | CaptureScreenshotMsg;

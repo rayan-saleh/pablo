@@ -217,6 +217,12 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
         return;
       }
 
+      case MSG.CAPTURE_SCREENSHOT: {
+        const windowId = sender.tab?.windowId;
+        sendResponse({ screenshot: await captureCroppedScreenshot(windowId, message.rect, message.dpr) });
+        return;
+      }
+
       case MSG.CONTINUE_CAPTURE:
       case MSG.CAPTURE_PHASE_UPDATE:
         sendResponse({ ok: true });
@@ -228,3 +234,50 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
 
   return true;
 });
+
+async function captureCroppedScreenshot(
+  windowId: number | undefined,
+  rect: { x: number; y: number; width: number; height: number },
+  dpr: number,
+): Promise<{ dataUrl: string; width: number; height: number } | null> {
+  try {
+    const scale = dpr > 0 ? dpr : 1;
+    const dataUrl = windowId !== undefined
+      ? await chrome.tabs.captureVisibleTab(windowId, { format: 'png' })
+      : await chrome.tabs.captureVisibleTab({ format: 'png' });
+    if (!dataUrl) return null;
+
+    const blob = await (await fetch(dataUrl)).blob();
+    const bitmap = await createImageBitmap(blob);
+
+    const sx = Math.max(0, Math.round(rect.x * scale));
+    const sy = Math.max(0, Math.round(rect.y * scale));
+    const sw = Math.min(bitmap.width - sx, Math.round(rect.width * scale));
+    const sh = Math.min(bitmap.height - sy, Math.round(rect.height * scale));
+    if (sw <= 0 || sh <= 0) {
+      bitmap.close();
+      return null;
+    }
+
+    const canvas = new OffscreenCanvas(sw, sh);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      bitmap.close();
+      return null;
+    }
+    ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
+    bitmap.close();
+
+    const croppedBlob = await canvas.convertToBlob({ type: 'image/png' });
+    const buffer = await croppedBlob.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+    }
+    return { dataUrl: `data:image/png;base64,${btoa(binary)}`, width: sw, height: sh };
+  } catch {
+    return null;
+  }
+}

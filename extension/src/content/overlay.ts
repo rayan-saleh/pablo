@@ -1,4 +1,4 @@
-import type { InspectorMode, TechStack, ClipboardPayload, StrategyKey, ComponentData, ComponentTree, AnimationData, FramerMotionData, GsapData, SemanticHint, InteractionPattern, ElementFingerprint, CaptureContextLevel } from '../shared/types';
+import type { InspectorMode, TechStack, ClipboardPayload, StrategyKey, ComponentData, ComponentTree, AnimationData, ComponentScreenshot, FramerMotionData, GsapData, SemanticHint, InteractionPattern, ElementFingerprint, CaptureContextLevel } from '../shared/types';
 import { REACT_BASED_STACKS } from '../shared/types';
 import { DEFAULT_CAPTURE_CONTEXT, getCapturePlan } from '../shared/capture-policy';
 import { detectStack, probeReactViaServiceWorker } from './detector';
@@ -545,6 +545,10 @@ async function handleExtraction(target: Element): Promise<void> {
     const capturePlan = getCapturePlan(captureContext);
     const extractionTarget = chooseExtractionTarget(target, strategy, captureContext);
 
+    const screenshot = capturePlan.includeScreenshot
+      ? await captureComponentScreenshot(extractionTarget)
+      : undefined;
+
     const mutationPromise = capturePlan.includeMutationRecording
       ? recordMutations(extractionTarget, 3000)
       : Promise.resolve(undefined);
@@ -639,13 +643,17 @@ async function handleExtraction(target: Element): Promise<void> {
       component: {
         selector,
         tag: extractionTarget.tagName.toLowerCase(),
-        html,
         ...(tree ? { tree } : {}),
         ...(animations ? { animations } : {}),
-        ...(semanticHints.length > 0 ? { semanticHints } : {}),
-        ...(interactionPatterns.length > 0 ? { interactionPatterns } : {}),
         ...(fonts && (fonts.fontFaces.length > 0 || fonts.pseudoContent.length > 0) ? { fonts } : {}),
-        ...(llmBundle ? { llm: llmBundle } : {}),
+        ...(llmBundle
+          ? { llm: llmBundle }
+          : {
+            html,
+            ...(semanticHints.length > 0 ? { semanticHints } : {}),
+            ...(interactionPatterns.length > 0 ? { interactionPatterns } : {}),
+          }),
+        ...(screenshot ? { screenshot } : {}),
         summary,
       },
     };
@@ -893,4 +901,31 @@ export function deactivate(): void {
     type: MSG.STATUS_UPDATE,
     status: 'ready',
   });
+}
+
+async function captureComponentScreenshot(target: Element): Promise<ComponentScreenshot | undefined> {
+  const rect = target.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return undefined;
+
+  const prevVisibility = hostEl ? hostEl.style.visibility : null;
+  if (hostEl) hostEl.style.visibility = 'hidden';
+
+  try {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    const response = await chrome.runtime.sendMessage({
+      type: MSG.CAPTURE_SCREENSHOT,
+      rect: { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
+      dpr: window.devicePixelRatio || 1,
+    });
+    const screenshot = response?.screenshot;
+    if (screenshot && typeof screenshot.dataUrl === 'string') {
+      return screenshot as ComponentScreenshot;
+    }
+    return undefined;
+  } catch (err) {
+    console.log('[Pablo] Screenshot capture failed:', err);
+    return undefined;
+  } finally {
+    if (hostEl) hostEl.style.visibility = prevVisibility ?? '';
+  }
 }

@@ -343,6 +343,12 @@ export interface LlmCaptureBundle {
 
 // --- Clipboard Payload ---
 
+export interface ComponentScreenshot {
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
 export interface ClipboardPayload {
   source: {
     url: string;
@@ -358,12 +364,13 @@ export interface ClipboardPayload {
     selector: string;
     tag: string;
     tree?: ComponentTree;
-    html: string;
+    html?: string;
     animations?: AnimationData;
     semanticHints?: SemanticHint[];
     interactionPatterns?: InteractionPattern[];
     fonts?: FontData;
     summary?: string;
     llm?: LlmCaptureBundle;
+    screenshot?: ComponentScreenshot;
   };
 }

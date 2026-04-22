@@ -7,6 +7,7 @@ export interface CapturePlan {
   includeLlmBundle: boolean;
   includeMutationRecording: boolean;
   includeReactTree: boolean;
+  includeScreenshot: boolean;
   runPostReloadAnimationCapture: boolean;
 }
 
@@ -16,6 +17,7 @@ const PLAN_BY_CONTEXT: Record<CaptureContextLevel, CapturePlan> = {
     includeLlmBundle: true,
     includeMutationRecording: false,
     includeReactTree: true,
+    includeScreenshot: false,
     runPostReloadAnimationCapture: false,
   },
   deep: {
@@ -23,6 +25,7 @@ const PLAN_BY_CONTEXT: Record<CaptureContextLevel, CapturePlan> = {
     includeLlmBundle: true,
     includeMutationRecording: true,
     includeReactTree: true,
+    includeScreenshot: true,
     runPostReloadAnimationCapture: true,
   },
 };
