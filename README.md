@@ -36,7 +36,7 @@ pnpm release:ext
 
 This creates `artifacts/pablo-extension-vX.Y.Z.zip` from `extension/dist`.
 
-To publish a GitHub release artifact, push a matching tag such as `v0.2.0`.
+To publish a GitHub release artifact, push a matching tag such as `vX.Y.Z`.
 The release workflow will verify that the tag matches `extension/public/manifest.json`,
 then test, build, zip, and attach the extension package to the GitHub release.
 
@@ -45,6 +45,23 @@ then test, build, zip, and attach the extension package to the GitHub release.
 - Store screenshots live in `assets/chrome-web-store/screenshots/`
 - Promo tiles and other listing art live in `assets/chrome-web-store/promotional/`
 - Notes for the listing and asset naming live in `assets/chrome-web-store/README.md`
+
+## Website Deploys
+
+The website auto-deploy path lives in `.github/workflows/deploy-web.yml`.
+
+- Pushes to `main` create a production Vercel deployment from `web/`
+- Pull requests to `main` create preview deployments from `web/`
+- Manual fallback: `cd web && vercel --prod --yes`
+
+GitHub repository secrets required for the workflow:
+
+- `VERCEL_TOKEN`
+- `VERCEL_ORG_ID`
+- `VERCEL_PROJECT_ID`
+
+The org and project IDs can be copied from `web/.vercel/project.json` on a linked local machine.
+If you want `https://getpablo.dev` to resolve, that custom domain still needs to be configured in the Vercel project itself.
 
 ## License
 
