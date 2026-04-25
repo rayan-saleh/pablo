@@ -1,63 +1,33 @@
 <p align="center">
-  <img src="extension/public/icons/logo.svg" width="80" alt="Pablo logo" />
+  <img src="./web/public/logo.svg" width="96" alt="Pablo logo" />
 </p>
 
-<h1 align="center">Pablo</h1>
+# Pablo
 
-<p align="center">
-  Copy any UI component from the web. Hover, click, clipboard.
-</p>
+Copy UI from the web.
 
-<p align="center">
-  <a href="https://chromewebstore.google.com">Chrome Web Store</a> ·
-  <a href="https://getpablo.dev">Website</a> ·
-  <a href="#contributing">Contributing</a>
-</p>
+Pablo is a Chrome extension that lets you hover an element, click it, and copy clean HTML + CSS to your clipboard.
 
----
+[Watch demo](./web/public/demo.mp4) · [Chrome Web Store](https://chromewebstore.google.com) · [Website](https://getpablo.dev)
 
-<p align="center">
-  <video src="web/public/demo.mp4" width="800" autoplay muted loop playsinline></video>
-</p>
-
-## What it does
-
-Pablo is a Chrome extension that lets you hover over any element on any website, click it, and get production-ready HTML + CSS on your clipboard — fonts, animations, and all.
-
-- **17+ framework detection** — React, Vue, Svelte, Webflow, Framer, Shopify, and more
-- **Static animation capture** — CSS keyframes, transitions, pseudo-state styles, GSAP introspection, framer-motion props
-- **Webflow IX2 interactions** — scroll and entrance interaction config from authored data
-- **Font & pseudo-element extraction** — @font-face declarations, ::before/::after styles
-- **Production-ready output** — shorthand collapsing, deduplication, browser-default cleanup
-- **Markdown clipboard payload** — single fenced output sized for coding-agent context windows, with optional embedded screenshot
+[![Pablo demo](./web/public/demo-poster.png)](./web/public/demo.mp4)
 
 ## Install
 
-**Chrome Web Store** (recommended):
-
-[Install Pablo →](https://chromewebstore.google.com)
-
-**Manual build:**
-
 ```bash
-git clone https://github.com/nicoreillmedia/pablo.git
-cd pablo
 pnpm install
 pnpm build:ext
 ```
 
-Then load `extension/dist` as an unpacked extension in `chrome://extensions` (enable Developer mode).
+Then load `extension/dist` in `chrome://extensions` with Developer mode enabled.
 
-## Development
+## Develop
 
 ```bash
-pnpm install          # install all dependencies
-pnpm dev:ext          # extension dev mode (hot reload)
-pnpm dev:web          # landing page dev server
-pnpm build:ext        # production extension build
-pnpm build:web        # production website build
+pnpm dev:ext
+pnpm dev:web
 ```
 
 ## License
 
-[MIT](LICENSE)
+[MIT](./LICENSE)
