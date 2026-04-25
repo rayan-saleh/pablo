@@ -3,13 +3,13 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://getpablo.dev"),
-  title: "Pablo — Copy any UI component from the web",
+  title: "Pablo. Recreate any UI component from the web.",
   description:
-    "Pablo is a Chrome extension that lets you hover over any component, click, and get production-ready HTML + CSS on your clipboard. Fonts, animations, GSAP, Framer Motion, Webflow IX2, and more.",
+    "Pablo is a Chrome extension that lets you hover over any component, click, and get HTML + CSS on your clipboard. Fonts, animations, GSAP, Framer Motion, Webflow IX2, and more.",
   openGraph: {
-    title: "Pablo — Copy any UI component from the web",
+    title: "Pablo. Recreate any UI component from the web.",
     description:
-      "Hover over any element, click, and get production-ready HTML + CSS on your clipboard. Fonts, animations, and all.",
+      "Hover over any element, click, and get HTML + CSS on your clipboard. Fonts, animations, and all.",
     url: "https://getpablo.dev",
     siteName: "Pablo",
     type: "website",
@@ -18,20 +18,16 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Pablo — Copy any UI component from the web",
+        alt: "Pablo. Recreate any UI component from the web.",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Pablo — Copy any UI component from the web",
+    title: "Pablo. Recreate any UI component from the web.",
     description:
-      "Hover over any element, click, and get production-ready HTML + CSS on your clipboard.",
+      "Hover over any element, click, and get HTML + CSS on your clipboard.",
     images: ["/og-image.png"],
-  },
-  icons: {
-    icon: "/favicon.ico",
-    apple: "/apple-touch-icon.png",
   },
 };
 
@@ -46,19 +42,18 @@ function GitHubIcon({ className = "h-4 w-4" }: { className?: string }) {
 function Nav() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/[0.08] bg-[#0a0b10]/90 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
+      <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-6">
         <a href="/" className="flex items-center gap-2.5">
-          <svg className="h-6 w-6 text-[#f4f7fb]" viewBox="0 0 100 100" fill="currentColor">
-            <path fillRule="evenodd" d="M50 4C25 5 8 24 8 48c0 26 19 46 42 48 23-2 42-22 42-48C92 24 75 3 50 4zm0 8c20 1 34 16 34 36 0 22-15 38-34 40C30 86 16 70 16 48 16 28 30 13 50 12z"/>
-            <path d="M34 36l8-6 8 6-8 6z"/>
-            <circle cx="66" cy="48" r="7"/>
-            <path d="M48 34l8 20-16 0z"/>
-            <rect x="48" y="14" width="3" height="60" rx="1.5"/>
-            <path d="M32 74l18-4 18 6-18 2z"/>
-          </svg>
+          <img src="/logo.png" alt="Pablo" className="h-6 w-6 object-contain" />
           <span className="text-[15px] font-semibold tracking-[-0.2px] text-[#f4f7fb] lowercase">Pablo</span>
         </a>
         <div className="flex items-center gap-2">
+          <a
+            href="https://chromewebstore.google.com"
+            className="flex h-[34px] items-center px-3.5 text-[11.8px] font-medium text-[#a0a8b8] border border-white/[0.12] bg-white/[0.01] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7] hover:bg-white/[0.04]"
+          >
+            Install
+          </a>
           <a
             href="https://github.com/rayan-saleh/pablo"
             target="_blank"
@@ -67,12 +62,6 @@ function Nav() {
           >
             <GitHubIcon className="mr-1.5 h-3.5 w-3.5" />
             GitHub
-          </a>
-          <a
-            href="https://chromewebstore.google.com"
-            className="flex h-[34px] items-center px-3.5 text-[11.8px] font-medium text-[#a0a8b8] border border-white/[0.12] bg-white/[0.01] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7] hover:bg-white/[0.04]"
-          >
-            Install
           </a>
         </div>
       </div>
@@ -83,19 +72,12 @@ function Nav() {
 function Footer() {
   return (
     <footer className="border-t border-dashed border-white/[0.1] py-10">
-      <div className="mx-auto flex max-w-5xl flex-col items-center gap-5 px-6 text-xs text-[#a0a8b8]">
+      <div className="mx-auto flex max-w-4xl flex-col items-center gap-5 px-6 text-xs text-[#a0a8b8]">
         <div className="flex items-center gap-2">
-          <svg className="h-4 w-4 text-[#d9dee7]" viewBox="0 0 100 100" fill="currentColor">
-            <path fillRule="evenodd" d="M50 4C25 5 8 24 8 48c0 26 19 46 42 48 23-2 42-22 42-48C92 24 75 3 50 4zm0 8c20 1 34 16 34 36 0 22-15 38-34 40C30 86 16 70 16 48 16 28 30 13 50 12z"/>
-            <path d="M34 36l8-6 8 6-8 6z"/>
-            <circle cx="66" cy="48" r="7"/>
-            <path d="M48 34l8 20-16 0z"/>
-            <rect x="48" y="14" width="3" height="60" rx="1.5"/>
-            <path d="M32 74l18-4 18 6-18 2z"/>
-          </svg>
+          <img src="/logo.png" alt="Pablo" className="h-4 w-4 object-contain" />
           <span className="font-semibold text-[#d9dee7] text-[13px]">pablo</span>
         </div>
-        <p className="text-[#737c8d]">Copy any UI component from the web. Built with care.</p>
+        <p className="text-[#737c8d]">Recreate any UI component from the web.</p>
         <div className="flex items-center gap-2">
           <a
             href="https://github.com/rayan-saleh/pablo"

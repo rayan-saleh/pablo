@@ -25,11 +25,11 @@
 Pablo is a Chrome extension that lets you hover over any element on any website, click it, and get production-ready HTML + CSS on your clipboard — fonts, animations, and all.
 
 - **17+ framework detection** — React, Vue, Svelte, Webflow, Framer, Shopify, and more
-- **Full animation capture** — CSS transitions, @keyframes, GSAP timelines, Framer Motion spring physics
-- **Webflow IX2 interactions** — scroll and entrance animations with full interaction data
+- **Static animation capture** — CSS keyframes, transitions, pseudo-state styles, GSAP introspection, framer-motion props
+- **Webflow IX2 interactions** — scroll and entrance interaction config from authored data
 - **Font & pseudo-element extraction** — @font-face declarations, ::before/::after styles
 - **Production-ready output** — shorthand collapsing, deduplication, browser-default cleanup
-- **Page-load & scroll animations** — refreshes and re-identifies elements to capture entrance effects
+- **Markdown clipboard payload** — single fenced output sized for coding-agent context windows, with optional embedded screenshot
 
 ## Install
 

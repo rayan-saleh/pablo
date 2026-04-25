@@ -30,8 +30,9 @@ export function ShowcaseCard({
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      e.preventDefault();
       dragging.current = true;
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      containerRef.current?.setPointerCapture(e.pointerId);
       updateSplit(e.clientX);
     },
     [updateSplit],
@@ -73,7 +74,10 @@ export function ShowcaseCard({
       {/* Slider area */}
       <div
         ref={containerRef}
-        className="relative min-h-[40rem] select-none overflow-hidden"
+        className="relative min-h-[40rem] cursor-col-resize select-none overflow-hidden"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
       >
         {/* Copied layer (bottom — revealed as slider moves right) */}
         <div className="absolute inset-0 isolate">
@@ -111,11 +115,8 @@ export function ShowcaseCard({
 
         {/* Slider handle */}
         <div
-          className="absolute top-0 bottom-0 z-20 w-1 cursor-col-resize"
+          className="pointer-events-none absolute top-0 bottom-0 z-20 w-1"
           style={{ left: `${split}%`, transform: "translateX(-50%)" }}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
         >
           {/* Vertical line */}
           <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white/20" />
