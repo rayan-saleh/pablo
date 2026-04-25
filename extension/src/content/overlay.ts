@@ -46,7 +46,7 @@ function createOverlay(): void {
     z-index: 2147483647;
     border: 2px solid #3b82f6;
     background: rgba(59, 130, 246, 0.1);
-    transition: all 0.05s ease-out;
+    transition: top 0.05s ease-out, left 0.05s ease-out, width 0.05s ease-out, height 0.05s ease-out;
     display: none;
   `;
 
@@ -794,12 +794,6 @@ function createToast(hasScreenshot: boolean): HTMLDivElement {
       copyShot.textContent = 'Copy Screenshot';
       copyShot.setAttribute('style', BUTTON_BASE_STYLE);
       toast.appendChild(copyShot);
-
-      const copyBoth = document.createElement('button');
-      copyBoth.dataset.action = 'copy-both';
-      copyBoth.textContent = 'Copy Both';
-      copyBoth.setAttribute('style', BUTTON_BASE_STYLE);
-      toast.appendChild(copyBoth);
     } else {
       // Fallback: only download is available for the image
       const download = document.createElement('button');
@@ -835,36 +829,6 @@ async function copyScreenshot(btn: HTMLButtonElement): Promise<void> {
   try {
     const blob = dataUrlToPngBlob(pendingScreenshotDataUrl);
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-    flashButtonSuccess(btn, original);
-  } catch (err) {
-    if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'DataError')) {
-      try {
-        const blob = dataUrlToPngBlob(pendingScreenshotDataUrl);
-        setButtonState(btn, 'Failed — downloading', 'error');
-        triggerDownloadFallback(blob);
-      } catch {
-        setButtonState(btn, 'Failed', 'error');
-      }
-      return;
-    }
-    throw err;
-  }
-}
-
-async function copyBoth(btn: HTMLButtonElement): Promise<void> {
-  const original = 'Copy Both';
-  if (!pendingScreenshotDataUrl || !pendingContextText) {
-    setButtonState(btn, 'No data — extract again', 'error');
-    return;
-  }
-  try {
-    const blob = dataUrlToPngBlob(pendingScreenshotDataUrl);
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        'image/png': blob,
-        'text/plain': new Blob([pendingContextText], { type: 'text/plain' }),
-      }),
-    ]);
     flashButtonSuccess(btn, original);
   } catch (err) {
     if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'DataError')) {
@@ -948,9 +912,6 @@ function showToast(hasScreenshot: boolean): void {
     switch (action) {
       case 'copy-screenshot':
         void copyScreenshot(target);
-        break;
-      case 'copy-both':
-        void copyBoth(target);
         break;
       case 'copy-context':
         void copyContext(target);
@@ -1101,8 +1062,8 @@ async function captureComponentScreenshot(target: Element): Promise<ComponentScr
   const rect = target.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return undefined;
 
-  const prevVisibility = hostEl ? hostEl.style.visibility : null;
-  if (hostEl) hostEl.style.visibility = 'hidden';
+  const prevDisplay = hostEl ? hostEl.style.display : null;
+  if (hostEl) hostEl.style.display = 'none';
 
   try {
     await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
@@ -1120,6 +1081,6 @@ async function captureComponentScreenshot(target: Element): Promise<ComponentScr
     console.log('[Pablo] Screenshot capture failed:', err);
     return undefined;
   } finally {
-    if (hostEl) hostEl.style.visibility = prevVisibility ?? '';
+    if (hostEl) hostEl.style.display = prevDisplay ?? '';
   }
 }

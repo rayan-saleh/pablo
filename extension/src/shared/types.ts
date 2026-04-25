@@ -75,7 +75,14 @@ export interface KeyframeDefinition {
 
 export type PseudoState = 'hover' | 'active' | 'focus' | 'focus-within' | 'focus-visible';
 
-export type PseudoStateStyles = Partial<Record<PseudoState, Record<string, string>>>;
+export interface PseudoStateDiff {
+  property: string;
+  baseValue: string;
+  value: string;
+  targetSelector?: string;
+}
+
+export type PseudoStateStyles = Partial<Record<PseudoState, PseudoStateDiff[]>>;
 
 export interface ActiveAnimationData {
   animationName: string;

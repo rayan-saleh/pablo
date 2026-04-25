@@ -134,6 +134,117 @@ test('animation timing defaults are stripped from active animation entries in ma
   assert.doesNotMatch(result.text, /iterations:\s*1/);
 });
 
+test('pseudo-state diffs render as base -> hover with matching transition timing', () => {
+  const result = buildMarkdownPayload(basePayload({
+    animations: {
+      cssAnimations: [],
+      cssTransitions: [
+        { property: 'background-color', duration: '0.2s', timingFunction: 'ease-in-out', delay: '0s' },
+      ],
+      keyframeDefinitions: [],
+      stateStyles: {
+        hover: [
+          { property: 'background-color', baseValue: 'rgb(255, 255, 255)', value: 'rgb(0, 0, 0)' },
+        ],
+      },
+      activeAnimations: [],
+      scrollTriggers: [],
+      framerMotion: [],
+      webflowIX2: [],
+      summary: 'hover diff',
+    },
+  }));
+  assert.match(result.text, /\*\*:hover\*\*:/);
+  assert.match(
+    result.text,
+    /background-color: rgb\(255, 255, 255\) -> rgb\(0, 0, 0\) on :hover \(transitions over 0\.2s ease-in-out\)/,
+  );
+});
+
+test('pseudo-state diff without matching transition omits transition parenthetical', () => {
+  const result = buildMarkdownPayload(basePayload({
+    animations: {
+      cssAnimations: [],
+      cssTransitions: [],
+      keyframeDefinitions: [],
+      stateStyles: {
+        hover: [
+          { property: 'color', baseValue: 'rgb(10, 10, 10)', value: 'rgb(200, 200, 200)' },
+        ],
+      },
+      activeAnimations: [],
+      scrollTriggers: [],
+      framerMotion: [],
+      webflowIX2: [],
+      summary: '',
+    },
+  }));
+  assert.match(result.text, /color: rgb\(10, 10, 10\) -> rgb\(200, 200, 200\) on :hover$/m);
+  assert.doesNotMatch(result.text, /transitions over/);
+});
+
+test('child pseudo-state diffs render as indented sub-bullets keyed by selector', () => {
+  const result = buildMarkdownPayload(basePayload({
+    animations: {
+      cssAnimations: [],
+      cssTransitions: [],
+      keyframeDefinitions: [],
+      stateStyles: {
+        hover: [
+          { property: 'background-color', baseValue: '#fff', value: '#000' },
+          { property: 'color', baseValue: '#888', value: '#fff', targetSelector: 'svg.icon' },
+        ],
+      },
+      activeAnimations: [],
+      scrollTriggers: [],
+      framerMotion: [],
+      webflowIX2: [],
+      summary: '',
+    },
+  }));
+  assert.match(result.text, /  - background-color: #fff -> #000 on :hover/);
+  assert.match(result.text, /  - `svg\.icon`:/);
+  assert.match(result.text, /    - color: #888 -> #fff on :hover/);
+});
+
+test('pseudo-state budget truncation drops child diffs before root diffs', () => {
+  // Build many child diffs to bust the 6KB budget.
+  const stateStyles = {
+    hover: [
+      { property: 'background-color', baseValue: '#fff', value: '#000' },
+      ...Array.from({ length: 200 }, (_, i) => ({
+        property: 'color',
+        baseValue: 'rgb(0, 0, 0)',
+        value: 'rgb(255, 255, 255)',
+        targetSelector: `span.child-${i}.with-some-extra-classes-to-bulk-up-bytes`,
+      })),
+    ],
+  };
+  const result = buildMarkdownPayload(basePayload({
+    animations: {
+      cssAnimations: [],
+      cssTransitions: [],
+      keyframeDefinitions: [],
+      stateStyles,
+      activeAnimations: [],
+      scrollTriggers: [],
+      framerMotion: [],
+      webflowIX2: [],
+      summary: '',
+    },
+  }));
+  // Root diff must remain.
+  assert.match(result.text, /background-color: #fff -> #000 on :hover/);
+  // Some child diffs must have been omitted.
+  assert.match(result.text, /child diffs omitted to fit budget/);
+  // The animations section as rendered must fit within its hard cap.
+  const animMatch = result.text.match(/## Animations\n([\s\S]*?)(?:\n##|\n$|$)/);
+  assert.ok(animMatch, 'should have an Animations section');
+  // Whole animations section (including header) under the 6KB hard cap.
+  const sectionLen = '## Animations\n'.length + animMatch![1].length;
+  assert.ok(sectionLen <= 6_000, `animations section length ${sectionLen} exceeds 6000-byte cap`);
+});
+
 test('filterDefaultStyles removes browser-default declarations from inline styles', () => {
   const html = '<div style="display: block; color: red; margin: 0px"><span style="display: inline">hi</span></div>';
   const filtered = filterDefaultStyles(html);

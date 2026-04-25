@@ -5,7 +5,9 @@ import type {
   StrategyKey,
   TechStack,
   PseudoState,
+  PseudoStateDiff,
   ActiveAnimationData,
+  CSSTransitionData,
 } from '../shared/types';
 
 export interface PayloadInput {
@@ -397,6 +399,165 @@ function fmtCssVariables(vars: Record<string, string>): string {
   return `## CSS Variables\n${fenceBlock('css', body)}`;
 }
 
+// --- Pseudo-state diff formatting ---
+
+const VALUE_TRUNCATE_LIMIT = 200;
+// Properties considered low-priority when budget squeezing.
+const LOW_PRIORITY_PROPS = new Set([
+  'cursor',
+  'outline-offset',
+  'outline-color',
+  'outline-style',
+  'outline-width',
+  'caret-color',
+  'user-select',
+  '-webkit-user-select',
+]);
+
+function truncateValue(value: string): string {
+  if (value.length <= VALUE_TRUNCATE_LIMIT) return value;
+  return value.slice(0, VALUE_TRUNCATE_LIMIT - 3) + '...';
+}
+
+function findMatchingTransition(
+  property: string,
+  transitions: CSSTransitionData[],
+): CSSTransitionData | undefined {
+  return transitions.find(
+    (t) => t.property === property || t.property === 'all',
+  );
+}
+
+function formatDiffLine(diff: PseudoStateDiff, state: PseudoState, transitions: CSSTransitionData[]): string {
+  const base = truncateValue(diff.baseValue);
+  const value = truncateValue(diff.value);
+  const match = findMatchingTransition(diff.property, transitions);
+  if (match) {
+    return `${diff.property}: ${base} -> ${value} on :${state} (transitions over ${match.duration} ${match.timingFunction})`;
+  }
+  return `${diff.property}: ${base} -> ${value} on :${state}`;
+}
+
+interface SectionAssembly {
+  rootLines: string[];
+  childGroups: { selector: string; lines: string[] }[];
+}
+
+function assemblePseudoState(
+  state: PseudoState,
+  diffs: PseudoStateDiff[],
+  transitions: CSSTransitionData[],
+): SectionAssembly {
+  const rootLines: string[] = [];
+  const childMap = new Map<string, string[]>();
+  for (const diff of diffs) {
+    const line = formatDiffLine(diff, state, transitions);
+    if (!diff.targetSelector) {
+      rootLines.push(line);
+    } else {
+      const list = childMap.get(diff.targetSelector) || [];
+      list.push(line);
+      childMap.set(diff.targetSelector, list);
+    }
+  }
+  return {
+    rootLines,
+    childGroups: Array.from(childMap.entries()).map(([selector, lines]) => ({ selector, lines })),
+  };
+}
+
+function renderAssembly(
+  state: PseudoState,
+  asm: SectionAssembly,
+  childOmittedNote?: number,
+): string {
+  const out: string[] = [];
+  out.push(`- **:${state}**:`);
+  for (const line of asm.rootLines) {
+    out.push(`  - ${line}`);
+  }
+  for (const group of asm.childGroups) {
+    out.push(`  - \`${group.selector}\`:`);
+    for (const line of group.lines) {
+      out.push(`    - ${line}`);
+    }
+  }
+  if (childOmittedNote && childOmittedNote > 0) {
+    out.push(`  <!-- ${childOmittedNote} child diffs omitted to fit budget -->`);
+  }
+  return out.join('\n');
+}
+
+function formatPseudoStateSections(
+  stateStyles: NonNullable<AnimationData['stateStyles']>,
+  transitions: CSSTransitionData[],
+  hardCap: number,
+): string {
+  const states = Object.keys(stateStyles) as PseudoState[];
+  // Build all assemblies first.
+  const assemblies: { state: PseudoState; asm: SectionAssembly }[] = [];
+  for (const state of states) {
+    const diffs = stateStyles[state];
+    if (!diffs || diffs.length === 0) continue;
+    const asm = assemblePseudoState(state, diffs, transitions);
+    if (asm.rootLines.length === 0 && asm.childGroups.length === 0) continue;
+    assemblies.push({ state, asm });
+  }
+  if (assemblies.length === 0) return '';
+
+  const omittedChildCounts = new Map<PseudoState, number>();
+  const render = () =>
+    assemblies
+      .map(({ state, asm }) => renderAssembly(state, asm, omittedChildCounts.get(state)))
+      .join('\n');
+
+  // Step 1: drop child groups (lowest-priority bucket) until under cap.
+  while (render().length > hardCap) {
+    let didDrop = false;
+    // Drop from the assembly with the most child groups first.
+    for (let i = assemblies.length - 1; i >= 0; i--) {
+      const asm = assemblies[i].asm;
+      if (asm.childGroups.length > 0) {
+        const popped = asm.childGroups.pop()!;
+        omittedChildCounts.set(
+          assemblies[i].state,
+          (omittedChildCounts.get(assemblies[i].state) || 0) + popped.lines.length,
+        );
+        didDrop = true;
+        break;
+      }
+    }
+    if (!didDrop) break;
+  }
+
+  // Step 2: if still over, drop low-priority root-line properties.
+  if (render().length > hardCap) {
+    for (const { asm } of assemblies) {
+      asm.rootLines = asm.rootLines.filter((line) => {
+        const propMatch = line.match(/^([a-z-]+):/i);
+        if (!propMatch) return true;
+        return !LOW_PRIORITY_PROPS.has(propMatch[1].toLowerCase());
+      });
+      if (render().length <= hardCap) break;
+    }
+  }
+
+  // Step 3: if still over, drop trailing root lines.
+  while (render().length > hardCap) {
+    let didDrop = false;
+    for (let i = assemblies.length - 1; i >= 0; i--) {
+      if (assemblies[i].asm.rootLines.length > 0) {
+        assemblies[i].asm.rootLines.pop();
+        didDrop = true;
+        break;
+      }
+    }
+    if (!didDrop) break;
+  }
+
+  return render();
+}
+
 function fmtAnimations(animations?: AnimationData): string {
   if (!animations) return '';
   const lines: string[] = [];
@@ -420,14 +581,14 @@ function fmtAnimations(animations?: AnimationData): string {
     lines.push(`- **Active animation:** ${active.animationName} { ${tStr} }`);
   }
 
+  // TODO(phase-2): empirical base64 screenshot spike — see .omc/plans/hover-context-enhanced-textual.md
   if (animations.stateStyles) {
-    const states = Object.keys(animations.stateStyles) as PseudoState[];
-    for (const state of states) {
-      const props = animations.stateStyles[state];
-      if (!props) continue;
-      const propStr = Object.entries(props).map(([k, v]) => `${k}: ${v}`).join('; ');
-      if (propStr) lines.push(`- **Pseudo-state:** :${state} { ${propStr} }`);
-    }
+    const pseudoLines = formatPseudoStateSections(
+      animations.stateStyles,
+      animations.cssTransitions,
+      SECTION_BUDGETS.animations.hardCap,
+    );
+    if (pseudoLines) lines.push(pseudoLines);
   }
 
   if (animations.gsap?.detected) {

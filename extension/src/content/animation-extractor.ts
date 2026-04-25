@@ -4,12 +4,14 @@ import type {
   CSSTransitionData,
   KeyframeDefinition,
   PseudoStateStyles,
+  PseudoStateDiff,
   PseudoState,
   ActiveAnimationData,
   ScrollTriggerData,
 } from '../shared/types';
 
 const MAX_SUBTREE_ELEMENTS = 200;
+const MAX_CHILDREN_WITH_PSEUDO_DIFFS = 20;
 
 const PSEUDO_STATES: PseudoState[] = ['hover', 'active', 'focus', 'focus-within', 'focus-visible'];
 
@@ -217,21 +219,88 @@ function processPseudoRule(
         continue;
       }
 
-      const props: Record<string, string> = {};
+      const diffs: PseudoStateDiff[] = [];
       for (let i = 0; i < rule.style.length; i++) {
         const prop = rule.style[i];
         const value = rule.style.getPropertyValue(prop);
         const baseValue = baseComputed.getPropertyValue(prop);
-        if (value && value !== baseValue) {
-          props[prop] = value;
-        }
+        if (!value) continue;
+        // Resolve the rule value (e.g., var(--accent) -> rgb(...)) by
+        // temporarily applying it to the element and reading computed style.
+        const resolvedValue = resolveCssValue(element, prop, value);
+        if (resolvedValue === baseValue) continue;
+        diffs.push({ property: prop, baseValue, value: resolvedValue });
       }
 
-      if (Object.keys(props).length > 0) {
-        stateStyles[pseudo] = { ...(stateStyles[pseudo] || {}), ...props };
+      if (diffs.length > 0) {
+        const existing = stateStyles[pseudo] || [];
+        // Dedupe by property within this state, last write wins.
+        const byProp = new Map<string, PseudoStateDiff>();
+        for (const d of existing) byProp.set(diffKey(d), d);
+        for (const d of diffs) byProp.set(diffKey(d), d);
+        stateStyles[pseudo] = Array.from(byProp.values());
       }
     }
   }
+}
+
+function diffKey(d: PseudoStateDiff): string {
+  return `${d.targetSelector ?? ''}::${d.property}`;
+}
+
+/**
+ * Resolve a raw CSS value (which may contain `var(--x)`, percentages, etc.)
+ * to its computed form by temporarily applying it inline on the element.
+ * Restores the original inline value & priority in a finally block.
+ * Exported for unit testing.
+ */
+export function resolveCssValue(element: Element, prop: string, value: string): string {
+  const htmlEl = element as HTMLElement;
+  if (!htmlEl.style || typeof htmlEl.style.setProperty !== 'function') {
+    return value;
+  }
+  const originalValue = htmlEl.style.getPropertyValue(prop);
+  const originalPriority = htmlEl.style.getPropertyPriority(prop);
+  try {
+    htmlEl.style.setProperty(prop, value, 'important');
+    return window.getComputedStyle(htmlEl).getPropertyValue(prop);
+  } catch {
+    return value;
+  } finally {
+    if (originalValue) {
+      htmlEl.style.setProperty(prop, originalValue, originalPriority);
+    } else {
+      htmlEl.style.removeProperty(prop);
+    }
+  }
+}
+
+/**
+ * Compute a minimal stable selector for a child element relative to its parent
+ * within a captured component subtree. Prefers `tagName.className` when the
+ * element has classes; otherwise falls back to `tagName:nth-child(n)`.
+ * Exported for unit testing.
+ */
+export function buildTargetSelector(element: Element): string {
+  const tag = element.tagName.toLowerCase();
+  const classAttr = element.getAttribute('class');
+  if (classAttr) {
+    const classes = classAttr
+      .split(/\s+/)
+      .map(c => c.trim())
+      .filter(Boolean);
+    if (classes.length > 0) {
+      return `${tag}.${classes.join('.')}`;
+    }
+  }
+  const parent = element.parentElement;
+  if (parent) {
+    const idx = Array.prototype.indexOf.call(parent.children, element);
+    if (idx >= 0) {
+      return `${tag}:nth-child(${idx + 1})`;
+    }
+  }
+  return tag;
 }
 
 // --- @keyframes Extraction ---
@@ -360,8 +429,9 @@ function generateSummary(data: Partial<AnimationData>): string {
   if (data.stateStyles) {
     const states = Object.keys(data.stateStyles) as PseudoState[];
     for (const state of states) {
-      const props = Object.keys(data.stateStyles[state]!);
-      if (props.length > 0) {
+      const diffs = data.stateStyles[state]!;
+      if (diffs.length > 0) {
+        const props = diffs.map(d => d.property);
         parts.push(`${state} state changes: ${props.join(', ')}`);
       }
     }
@@ -434,6 +504,26 @@ export function extractAnimations(element: Element): AnimationData | undefined {
   });
 
   const stateStyles = extractPseudoStateStyles(element);
+
+  // Subtree pseudo-state extraction: tag each child diff with a target selector
+  // and merge into the root stateStyles. Capped at 20 unique contributing children.
+  let childrenWithDiffs = 0;
+  for (const child of subtreeElements) {
+    if (childrenWithDiffs >= MAX_CHILDREN_WITH_PSEUDO_DIFFS) break;
+    if (child === element) continue;
+    const childStyles = extractPseudoStateStyles(child);
+    const states = Object.keys(childStyles) as PseudoState[];
+    let contributed = false;
+    for (const state of states) {
+      const diffs = childStyles[state];
+      if (!diffs || diffs.length === 0) continue;
+      const selector = buildTargetSelector(child);
+      const tagged = diffs.map(d => ({ ...d, targetSelector: selector }));
+      stateStyles[state] = [...(stateStyles[state] || []), ...tagged];
+      contributed = true;
+    }
+    if (contributed) childrenWithDiffs++;
+  }
 
   // Collect all animation names for @keyframes lookup
   const allAnimNames = [
