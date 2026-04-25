@@ -1,9 +1,13 @@
 {
   "name": "pablo",
   "private": true,
+  "packageManager": "pnpm@8.5.1",
   "scripts": {
     "dev:ext": "pnpm --filter @pablo/extension dev",
+    "test:ext": "pnpm --filter @pablo/extension test",
     "build:ext": "pnpm --filter @pablo/extension build",
+    "package:ext": "pnpm build:ext && node scripts/package-extension.mjs",
+    "release:ext": "pnpm test:ext && pnpm package:ext",
     "dev:web": "pnpm --filter @pablo/web dev",
     "build:web": "pnpm --filter @pablo/web build"
   }

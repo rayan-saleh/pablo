@@ -10,7 +10,7 @@ Pablo is a Chrome extension that lets you hover an element, click it, and copy c
 
 [Watch demo](./web/public/demo.mp4) · [Chrome Web Store](https://chromewebstore.google.com) · [Website](https://getpablo.dev)
 
-[![Pablo demo](./web/public/demo-poster.png)](./web/public/demo.mp4)
+[![Pablo demo](./web/public/demo.gif)](./web/public/demo.mp4)
 
 ## Install
 
@@ -27,6 +27,24 @@ Then load `extension/dist` in `chrome://extensions` with Developer mode enabled.
 pnpm dev:ext
 pnpm dev:web
 ```
+
+## Release
+
+```bash
+pnpm release:ext
+```
+
+This creates `artifacts/pablo-extension-vX.Y.Z.zip` from `extension/dist`.
+
+To publish a GitHub release artifact, push a matching tag such as `v0.2.0`.
+The release workflow will verify that the tag matches `extension/public/manifest.json`,
+then test, build, zip, and attach the extension package to the GitHub release.
+
+## Chrome Web Store Assets
+
+- Store screenshots live in `assets/chrome-web-store/screenshots/`
+- Promo tiles and other listing art live in `assets/chrome-web-store/promotional/`
+- Notes for the listing and asset naming live in `assets/chrome-web-store/README.md`
 
 ## License
 

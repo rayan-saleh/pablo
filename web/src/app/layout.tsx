@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { chromeWebStoreUrl, githubRepoUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://getpablo.dev"),
@@ -49,13 +50,25 @@ function Nav() {
         </a>
         <div className="flex items-center gap-2">
           <a
-            href="https://chromewebstore.google.com"
+            href="/privacy"
+            className="hidden h-[34px] items-center px-3.5 text-[11.8px] font-medium text-[#a0a8b8] border border-white/[0.12] bg-white/[0.01] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7] hover:bg-white/[0.04] sm:flex"
+          >
+            Privacy
+          </a>
+          <a
+            href="/support"
+            className="hidden h-[34px] items-center px-3.5 text-[11.8px] font-medium text-[#a0a8b8] border border-white/[0.12] bg-white/[0.01] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7] hover:bg-white/[0.04] sm:flex"
+          >
+            Support
+          </a>
+          <a
+            href={chromeWebStoreUrl}
             className="flex h-[34px] items-center px-3.5 text-[11.8px] font-medium text-[#a0a8b8] border border-white/[0.12] bg-white/[0.01] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7] hover:bg-white/[0.04]"
           >
             Install
           </a>
           <a
-            href="https://github.com/rayan-saleh/pablo"
+            href={githubRepoUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="flex h-[34px] items-center px-3.5 text-[11.8px] font-medium text-[#a0a8b8] border border-white/[0.12] bg-white/[0.01] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7] hover:bg-white/[0.04]"
@@ -78,9 +91,21 @@ function Footer() {
           <span className="font-semibold text-[#d9dee7] text-[13px]">pablo</span>
         </div>
         <p className="text-[#737c8d]">Recreate any UI component from the web.</p>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2">
           <a
-            href="https://github.com/rayan-saleh/pablo"
+            href="/privacy"
+            className="flex h-[34px] items-center px-3.5 text-[11.8px] font-medium text-[#a0a8b8] border border-white/[0.12] bg-white/[0.01] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7]"
+          >
+            Privacy
+          </a>
+          <a
+            href="/support"
+            className="flex h-[34px] items-center px-3.5 text-[11.8px] font-medium text-[#a0a8b8] border border-white/[0.12] bg-white/[0.01] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7]"
+          >
+            Support
+          </a>
+          <a
+            href={githubRepoUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="flex h-[34px] items-center px-3.5 text-[11.8px] font-medium text-[#a0a8b8] border border-white/[0.12] bg-white/[0.01] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7]"
@@ -89,7 +114,7 @@ function Footer() {
             GitHub
           </a>
           <a
-            href="https://chromewebstore.google.com"
+            href={chromeWebStoreUrl}
             className="flex h-[34px] items-center px-3.5 text-[11.8px] font-medium text-[#a0a8b8] border border-white/[0.12] bg-white/[0.01] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7]"
           >
             Chrome Web Store

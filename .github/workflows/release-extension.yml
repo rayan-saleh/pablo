@@ -1,0 +1,53 @@
+name: Release Extension
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.5.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify tag matches extension version
+        run: |
+          VERSION=$(node -p "require('./extension/public/manifest.json').version")
+          if [ "${GITHUB_REF_NAME}" != "v$VERSION" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match extension version v$VERSION"
+            exit 1
+          fi
+          echo "EXT_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Run extension tests
+        run: pnpm test:ext
+
+      - name: Build and package extension
+        run: pnpm package:ext
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Pablo v${{ env.EXT_VERSION }}
+          generate_release_notes: true
+          files: artifacts/pablo-extension-v${{ env.EXT_VERSION }}.zip

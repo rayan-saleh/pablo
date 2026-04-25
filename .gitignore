@@ -3,6 +3,7 @@ dist
 .DS_Store
 .next
 .vercel
+artifacts/
 *.local
 .env
 .env.*

@@ -4,6 +4,7 @@ import { StripeMock } from "@/components/mocks/StripeMock";
 import { WebflowMock } from "@/components/mocks/WebflowMock";
 import { FloatingIconsHeroMock } from "@/components/mocks/FloatingIconsHeroMock";
 import { FloatingIconsHeroCopied } from "@/components/mocks/FloatingIconsHeroCopied";
+import { chromeWebStoreUrl, githubRepoUrl } from "@/lib/site";
 
 function GitHubIcon({ className = "h-5 w-5" }: { className?: string }) {
   return (
@@ -113,7 +114,7 @@ export default function Home() {
           {/* CTA buttons */}
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <a
-              href="https://chromewebstore.google.com"
+              href={chromeWebStoreUrl}
               className="group flex h-12 items-center gap-3 border border-white/[0.12] bg-gradient-to-r from-[#151923] to-[#0f1219] px-4 text-[13.4px] text-[#eef3ff] transition-all duration-200 hover:shadow-[0_0_24px_rgba(122,162,247,0.08)] hover:border-white/[0.18]"
               style={{
                 backgroundImage: 'radial-gradient(256px 128px at 16% 50%, rgba(122, 162, 247, 0.14), transparent 78%), linear-gradient(#151923, #0f1219)',
@@ -123,7 +124,7 @@ export default function Home() {
               <span>Install</span>
             </a>
             <a
-              href="https://github.com/rayan-saleh/pablo"
+              href={githubRepoUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="flex h-12 items-center gap-2 border border-white/[0.12] px-4 text-[11.8px] text-[#a0a8b8] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7]"
@@ -230,7 +231,7 @@ export default function Home() {
           <p className="mt-2 text-xs text-[#737c8d]">Free and open source.</p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <a
-              href="https://chromewebstore.google.com"
+              href={chromeWebStoreUrl}
               className="group flex h-12 items-center gap-3 border border-white/[0.12] bg-gradient-to-r from-[#151923] to-[#0f1219] px-4 text-[13.4px] text-[#eef3ff] transition-all duration-200 hover:shadow-[0_0_24px_rgba(122,162,247,0.08)] hover:border-white/[0.18]"
               style={{
                 backgroundImage: 'radial-gradient(256px 128px at 16% 50%, rgba(122, 162, 247, 0.14), transparent 78%), linear-gradient(#151923, #0f1219)',
@@ -240,7 +241,7 @@ export default function Home() {
               <span>Install</span>
             </a>
             <a
-              href="https://github.com/rayan-saleh/pablo"
+              href={githubRepoUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="flex h-12 items-center gap-2 border border-white/[0.12] px-4 text-[11.8px] text-[#a0a8b8] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7]"
