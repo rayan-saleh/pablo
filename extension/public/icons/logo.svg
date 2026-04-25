@@ -1,37 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
-  <title id="title">Pablo logo</title>
-  <desc id="desc">A simplified cubist face in a rounded square.</desc>
-  <defs>
-    <linearGradient id="bg" x1="28" y1="24" x2="220" y2="232" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#11255b" />
-      <stop offset="1" stop-color="#081635" />
-    </linearGradient>
-    <linearGradient id="left" x1="40" y1="28" x2="118" y2="230" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#243f88" />
-      <stop offset="1" stop-color="#102454" />
-    </linearGradient>
-    <linearGradient id="right" x1="126" y1="32" x2="228" y2="214" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#4c7bff" />
-      <stop offset="1" stop-color="#1a39d2" />
-    </linearGradient>
-    <linearGradient id="accent" x1="84" y1="56" x2="150" y2="200" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#66e5ff" />
-      <stop offset="1" stop-color="#1ea8ff" />
-    </linearGradient>
-    <clipPath id="clip">
-      <rect x="18" y="18" width="220" height="220" rx="54" />
-    </clipPath>
-  </defs>
-
-  <g clip-path="url(#clip)">
-    <rect x="18" y="18" width="220" height="220" rx="54" fill="url(#bg)" />
-    <path d="M18 18h110L108 238H18V18Z" fill="url(#left)" />
-    <path d="M126 26l112 18v170L126 238V26Z" fill="url(#right)" />
-    <path d="M96 48h42l-12 86 20 104H96l12-102-12-88Z" fill="url(#accent)" />
-    <path d="M72 86c11 11 26 17 43 17" fill="none" stroke="#071222" stroke-linecap="round" stroke-width="10" />
-    <ellipse cx="168" cy="94" rx="35" ry="19" fill="#f4f8ff" />
-    <circle cx="174" cy="94" r="12" fill="#071222" />
-    <path d="M98 166l30-13 30 14-30 17-30-12Z" fill="#071222" />
-    <path d="M18 238l78-110 44 110H18Z" fill="url(#accent)" opacity="0.95" />
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="currentColor">
+  <!-- Picasso cubist face — frontal/profile hybrid -->
+  <!-- Asymmetric head outline -->
+  <path fill-rule="evenodd" d="M50 4C25 5 8 24 8 48c0 26 19 46 42 48 23-2 42-22 42-48C92 24 75 3 50 4zm0 8c20 1 34 16 34 36 0 22-15 38-34 40C30 86 16 70 16 48 16 28 30 13 50 12z"/>
+  <!-- Left eye: diamond (frontal view), higher -->
+  <path d="M34 36l8-6 8 6-8 6z"/>
+  <!-- Right eye: circle (profile view), lower -->
+  <circle cx="66" cy="48" r="7"/>
+  <!-- Nose: angular wedge, off-center -->
+  <path d="M48 34l8 20-16 0z"/>
+  <!-- Vertical plane-dividing line -->
+  <rect x="48" y="14" width="3" height="60" rx="1.5"/>
+  <!-- Mouth: angular asymmetric -->
+  <path d="M32 74l18-4 18 6-18 2z"/>
 </svg>

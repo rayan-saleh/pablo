@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./web/public/logo.svg" width="96" alt="Pablo logo" />
+  <img src="./web/public/logo.png" width="96" alt="Pablo logo" />
 </p>
 
 # Pablo

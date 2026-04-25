@@ -44,7 +44,7 @@ function Nav() {
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/[0.08] bg-[#0a0b10]/90 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-6">
         <a href="/" className="flex items-center gap-2.5">
-          <img src="/logo.svg" alt="Pablo" className="h-6 w-6 object-contain" />
+          <img src="/logo.png" alt="Pablo" className="h-6 w-6 object-contain" />
           <span className="text-[15px] font-semibold tracking-[-0.2px] text-[#f4f7fb] lowercase">Pablo</span>
         </a>
         <div className="flex items-center gap-2">
@@ -74,7 +74,7 @@ function Footer() {
     <footer className="border-t border-dashed border-white/[0.1] py-10">
       <div className="mx-auto flex max-w-4xl flex-col items-center gap-5 px-6 text-xs text-[#a0a8b8]">
         <div className="flex items-center gap-2">
-          <img src="/logo.svg" alt="Pablo" className="h-4 w-4 object-contain" />
+          <img src="/logo.png" alt="Pablo" className="h-4 w-4 object-contain" />
           <span className="font-semibold text-[#d9dee7] text-[13px]">pablo</span>
         </div>
         <p className="text-[#737c8d]">Recreate any UI component from the web.</p>
