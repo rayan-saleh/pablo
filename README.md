@@ -57,10 +57,9 @@ The website auto-deploy path lives in `.github/workflows/deploy-web.yml`.
 GitHub repository secrets required for the workflow:
 
 - `VERCEL_TOKEN`
-- `VERCEL_ORG_ID`
-- `VERCEL_PROJECT_ID`
 
-The org and project IDs can be copied from `web/.vercel/project.json` on a linked local machine.
+The current Vercel org/project IDs are embedded in the workflow from the linked `web/.vercel/project.json`.
+If you relink the website to a different Vercel project later, update `.github/workflows/deploy-web.yml` to match.
 If you want `https://getpablo.dev` to resolve, that custom domain still needs to be configured in the Vercel project itself.
 
 ## License

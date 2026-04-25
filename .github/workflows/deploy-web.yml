@@ -21,8 +21,8 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
     env:
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ORG_ID: team_IxAisTlclMHr8yA8aZxf5c1O
+      VERCEL_PROJECT_ID: prj_PTretDWeNsbAmLjmiMkRgYrLwkoT
     defaults:
       run:
         working-directory: web
@@ -52,8 +52,8 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ORG_ID: team_IxAisTlclMHr8yA8aZxf5c1O
+      VERCEL_PROJECT_ID: prj_PTretDWeNsbAmLjmiMkRgYrLwkoT
     defaults:
       run:
         working-directory: web
