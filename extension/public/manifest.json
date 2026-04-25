@@ -3,7 +3,7 @@
   "name": "Pablo",
   "description": "Copy any UI component from the web. Hover, click, and get production-ready HTML + CSS — with fonts, animations, GSAP, Framer Motion, Webflow IX2, and 17+ framework support.",
   "version": "0.2.0",
-  "permissions": ["activeTab", "tabs", "scripting", "clipboardWrite", "webNavigation", "storage"],
+  "permissions": ["activeTab", "tabs", "scripting", "clipboardWrite", "storage"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "src/popup/index.html",

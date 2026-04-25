@@ -1,35 +1,43 @@
-import type { InspectorMode, TechStack, ClipboardPayload, StrategyKey, ComponentData, ComponentTree, AnimationData, ComponentScreenshot, FramerMotionData, GsapData, SemanticHint, InteractionPattern, ElementFingerprint, CaptureContextLevel } from '../shared/types';
+import type { InspectorMode, TechStack, StrategyKey, ComponentData, ComponentTree, AnimationData, ComponentScreenshot, FramerMotionData, GsapData, SemanticHint, InteractionPattern } from '../shared/types';
 import { REACT_BASED_STACKS } from '../shared/types';
-import { DEFAULT_CAPTURE_CONTEXT, getCapturePlan } from '../shared/capture-policy';
 import { detectStack, probeReactViaServiceWorker } from './detector';
 import { extractElement, getStrategy } from './extractor';
 import { extractAnimations, mergeAnimationData } from './animation-extractor';
 import { extractFonts } from './font-extractor';
-import { recordMutations } from './mutation-recorder';
 import { MSG } from '../shared/messages';
-import { copyPayloadToClipboard, startFullCapture, continueCapture } from './capture-orchestrator';
 import { buildLlmBundle } from './llm-bundle';
+import { buildMarkdownPayload } from './payload-builder';
 import { buildRelativeSelectorPath, buildSummarySelector } from '../shared/selector-paths';
+import { dataUrlToPngBlob } from './clipboard';
 
 let active = false;
 let mode: InspectorMode = 'component';
-let captureContext: CaptureContextLevel = DEFAULT_CAPTURE_CONTEXT;
+let includeScreenshot = true;
 let currentTarget: Element | null = null;
 let detectedStack: TechStack = 'generic';
 
 // Shadow DOM host for the overlay
 let hostEl: HTMLDivElement | null = null;
+let shadowRoot: ShadowRoot | null = null;
 let overlayEl: HTMLDivElement | null = null;
 let labelEl: HTMLDivElement | null = null;
 let spinnerEl: HTMLDivElement | null = null;
+let spinnerTextEl: HTMLSpanElement | null = null;
 let extracting = false;
+
+// Toast / pending clipboard state
+let pendingScreenshotDataUrl: string | null = null;
+let pendingContextText: string | null = null;
+let toastEl: HTMLDivElement | null = null;
+let toastVisible = false;
+let dataClearTimer: ReturnType<typeof setTimeout> | null = null;
 
 function createOverlay(): void {
   if (hostEl) return;
 
   hostEl = document.createElement('div');
   hostEl.id = '__pablo-overlay-host';
-  const shadow = hostEl.attachShadow({ mode: 'closed' });
+  shadowRoot = hostEl.attachShadow({ mode: 'closed' });
 
   overlayEl = document.createElement('div');
   overlayEl.style.cssText = `
@@ -76,7 +84,7 @@ function createOverlay(): void {
       <circle cx="7" cy="7" r="5.5" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
       <path d="M7 1.5 A5.5 5.5 0 0 1 12.5 7" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"/>
     </svg>
-    <span>Extracting…</span>
+    <span id="__pablo-spinner-text">Extracting…</span>
   `;
 
   const style = document.createElement('style');
@@ -88,20 +96,25 @@ function createOverlay(): void {
     }
   `;
 
-  shadow.appendChild(style);
-  shadow.appendChild(overlayEl);
-  shadow.appendChild(labelEl);
-  shadow.appendChild(spinnerEl);
+  shadowRoot.appendChild(style);
+  shadowRoot.appendChild(overlayEl);
+  shadowRoot.appendChild(labelEl);
+  shadowRoot.appendChild(spinnerEl);
   document.documentElement.appendChild(hostEl);
+  spinnerTextEl = shadowRoot.getElementById('__pablo-spinner-text') as HTMLSpanElement | null;
 }
 
 function destroyOverlay(): void {
   if (hostEl) {
     hostEl.remove();
     hostEl = null;
+    shadowRoot = null;
     overlayEl = null;
     labelEl = null;
     spinnerEl = null;
+    spinnerTextEl = null;
+    toastEl = null;
+    toastVisible = false;
   }
 }
 
@@ -139,6 +152,9 @@ function showExtracting(): void {
   if (labelEl) {
     labelEl.textContent = 'Extracting…';
     labelEl.style.background = '#8b5cf6';
+  }
+  if (spinnerTextEl) {
+    spinnerTextEl.textContent = 'Extracting…';
   }
   if (spinnerEl && overlayEl) {
     const rect = overlayEl.getBoundingClientRect();
@@ -227,29 +243,8 @@ function boundaryScore(el: Element): number {
 function chooseExtractionTarget(
   clickedTarget: Element,
   strategy: ReturnType<typeof getStrategy>,
-  contextLevel: CaptureContextLevel,
 ): Element {
-  const expanded = strategy.expandSelection(clickedTarget);
-  const normalized = normalizeBoundary(expanded);
-  if (contextLevel === 'basic') {
-    return normalized;
-  }
-
-  // Deep: allow one stronger climb to include nearby context around the component.
-  let best = normalized;
-  let current: Element | null = normalized.parentElement;
-  let depth = 0;
-  while (current && depth < 8) {
-    const score = boundaryScore(current);
-    const bestScore = boundaryScore(best);
-    if (score >= bestScore && current.getBoundingClientRect().width <= window.innerWidth * 0.98) {
-      best = current;
-    }
-    if (isHardBoundary(current)) break;
-    current = current.parentElement;
-    depth++;
-  }
-  return best;
+  return normalizeBoundary(strategy.expandSelection(clickedTarget));
 }
 
 /**
@@ -500,7 +495,7 @@ function generateComponentSummary(element: Element, semanticHints?: SemanticHint
 // --- Event handlers ---
 
 function onMouseMove(e: MouseEvent): void {
-  if (!active || extracting) return;
+  if (!active || extracting || toastVisible) return;
 
   if (mode === 'page') {
     const target = getPageTarget();
@@ -521,7 +516,7 @@ function onMouseMove(e: MouseEvent): void {
 }
 
 async function onClick(e: MouseEvent): Promise<void> {
-  if (!active || extracting) return;
+  if (!active || extracting || toastVisible) return;
 
   e.preventDefault();
   e.stopPropagation();
@@ -542,16 +537,11 @@ async function handleExtraction(target: Element): Promise<void> {
   showExtracting();
   try {
     const strategy = getStrategy(detectedStack);
-    const capturePlan = getCapturePlan(captureContext);
-    const extractionTarget = chooseExtractionTarget(target, strategy, captureContext);
+    const extractionTarget = chooseExtractionTarget(target, strategy);
 
-    const screenshot = capturePlan.includeScreenshot
-      ? await captureComponentScreenshot(extractionTarget)
+    const screenshot: ComponentScreenshot | undefined = includeScreenshot
+      ? await captureComponentScreenshot(target)
       : undefined;
-
-    const mutationPromise = capturePlan.includeMutationRecording
-      ? recordMutations(extractionTarget, 3000)
-      : Promise.resolve(undefined);
 
     const html = extractElement(extractionTarget, detectedStack);
 
@@ -563,33 +553,26 @@ async function handleExtraction(target: Element): Promise<void> {
       animations = mergeAnimationData(animations, strategyAnimations);
     }
 
-    if (capturePlan.includeGsap) {
-      const gsapData = await collectGsapViaServiceWorker(extractionTarget);
-      if (gsapData) {
-        console.log(
-          '[Pablo] GSAP data found:',
-          gsapData.version || 'detected',
-          'scrollTriggers:',
-          gsapData.scrollTriggers.length,
-          'tweens:',
-          gsapData.tweens.length,
-        );
-        if (gsapData.timelineTree) {
-          console.log('[Pablo] GSAP timeline tree captured, children:', gsapData.timelineTree.children.length);
-        }
-        animations = mergeAnimationData(animations, { gsap: gsapData });
-      }
+    const gsapData = await collectGsapViaServiceWorker(extractionTarget);
+    if (gsapData?.detected) {
+      console.log(
+        '[Pablo] GSAP data found:',
+        gsapData.version || 'detected',
+        'scrollTriggers:',
+        gsapData.scrollTriggers.length,
+        'tweens:',
+        gsapData.tweens.length,
+      );
+      animations = mergeAnimationData(animations, { gsap: gsapData });
     }
 
     let tree: ComponentTree | undefined;
-    if (capturePlan.includeReactTree && (REACT_BASED_STACKS.has(detectedStack) || detectedStack === 'framer')) {
+    if (REACT_BASED_STACKS.has(detectedStack) || detectedStack === 'framer') {
       console.log('[Pablo] Attempting fiber collection via service worker');
       const fiberData = await collectFiberViaServiceWorker(extractionTarget);
       if (fiberData) {
         console.log('[Pablo] Fiber data received, components:', fiberData.components.length);
         tree = buildComponentTree(fiberData.components, fiberData.rootComponentName);
-
-        // Merge Framer Motion data from fiber collection
         if (fiberData.motionComponents && fiberData.motionComponents.length > 0) {
           console.log('[Pablo] Framer Motion data found:', fiberData.motionComponents.length, 'components');
           animations = mergeAnimationData(animations, {
@@ -605,71 +588,60 @@ async function handleExtraction(target: Element): Promise<void> {
     const interactionPatterns = detectInteractionPatterns(extractionTarget);
     const fonts = extractFonts(extractionTarget);
     console.log('[Pablo] Font extraction:', fonts.fontFaces.length, 'font-faces,', fonts.pseudoContent.length, 'pseudo-elements');
-    const summary = generateComponentSummary(extractionTarget, semanticHints);
-
-    const domRecording = await mutationPromise;
-    if (domRecording) {
-      console.log('[Pablo] DOM mutation recording:', domRecording.mutations.length, 'mutations');
-      animations = mergeAnimationData(animations, { domRecording });
-    }
+    void generateComponentSummary(extractionTarget, semanticHints);
 
     const selector = buildSelector(extractionTarget);
-    const llmBundle = capturePlan.includeLlmBundle
-      ? buildLlmBundle({
-        target: extractionTarget,
-        selector,
-        strategy: getStrategyKey(detectedStack),
-        framework: detectedStack,
-        captureContext,
-        styledHtml: html,
-        animations,
-        semanticHints,
-        interactionPatterns,
-        fonts,
-      })
-      : undefined;
+    const llmBundle = buildLlmBundle({
+      target: extractionTarget,
+      selector,
+      strategy: getStrategyKey(detectedStack),
+      framework: detectedStack,
+      styledHtml: html,
+      animations,
+      semanticHints,
+      interactionPatterns,
+      fonts,
+    });
 
-    const payload: ClipboardPayload = {
-      source: {
-        url: window.location.href,
-        title: document.title,
-        timestamp: new Date().toISOString(),
-        viewport: { width: window.innerWidth, height: window.innerHeight },
-      },
-      detection: {
-        framework: detectedStack,
-        strategy: getStrategyKey(detectedStack),
-      },
-      component: {
-        selector,
+    const result = buildMarkdownPayload({
+      selector,
+      tag: extractionTarget.tagName.toLowerCase(),
+      url: window.location.href,
+      title: document.title,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      framework: detectedStack,
+      strategy: getStrategyKey(detectedStack),
+      styledHtml: llmBundle.structure.html,
+      cssRules: llmBundle.styles.cssRules,
+      cssVariables: llmBundle.styles.cssVariables,
+      animations,
+      interactiveSelectors: llmBundle.behavior.interactiveSelectors,
+      ariaRoles: llmBundle.behavior.ariaRoles,
+      fonts,
+      componentTree: tree,
+      hasScreenshot: !!screenshot,
+    });
+
+    pendingScreenshotDataUrl = screenshot?.dataUrl ?? null;
+    pendingContextText = result.text;
+    console.log('[Pablo] Extraction ready, size:', result.text.length, 'truncated:', result.truncated, 'hasScreenshot:', !!screenshot);
+
+    chrome.runtime.sendMessage({
+      type: MSG.EXTRACTION_COMPLETE,
+      meta: {
         tag: extractionTarget.tagName.toLowerCase(),
-        ...(tree ? { tree } : {}),
-        ...(animations ? { animations } : {}),
-        ...(fonts && (fonts.fontFaces.length > 0 || fonts.pseudoContent.length > 0) ? { fonts } : {}),
-        ...(llmBundle
-          ? { llm: llmBundle }
-          : {
-            html,
-            ...(semanticHints.length > 0 ? { semanticHints } : {}),
-            ...(interactionPatterns.length > 0 ? { interactionPatterns } : {}),
-          }),
-        ...(screenshot ? { screenshot } : {}),
-        summary,
+        stack: detectedStack,
+        size: result.text.length,
+        hasScreenshot: !!screenshot,
       },
-    };
+    });
 
-    if (capturePlan.runPostReloadAnimationCapture) {
-      hideExtracting(false);
-      showCaptureProgress('Starting animation capture…');
-      startFullCapture(extractionTarget, payload, (phase) => {
-        updateCapturePhase(phase);
-      });
-      return;
-    }
-
-    await copyPayloadToClipboard(payload);
     hideExtracting();
-    flashGreen();
+    if (result.truncated) {
+      const overKb = (result.oversize / 1024).toFixed(1);
+      console.log(`[Pablo] truncated — ${overKb} KB over cap`);
+    }
+    showToast(!!pendingScreenshotDataUrl);
   } catch (err) {
     hideExtracting();
     if (labelEl) {
@@ -694,85 +666,6 @@ async function handleExtraction(target: Element): Promise<void> {
       status: 'error',
     });
   }
-}
-
-// --- Capture Progress UI (shown after page refresh) ---
-
-let captureHostEl: HTMLDivElement | null = null;
-let captureStatusEl: HTMLSpanElement | null = null;
-
-function showCaptureProgress(phase: string): void {
-  if (captureHostEl) return;
-
-  captureHostEl = document.createElement('div');
-  captureHostEl.id = '__pablo-capture-host';
-  const shadow = captureHostEl.attachShadow({ mode: 'closed' });
-
-  const container = document.createElement('div');
-  container.style.cssText = `
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    z-index: 2147483647;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: rgba(0, 0, 0, 0.85);
-    color: white;
-    font: 13px/1.4 -apple-system, BlinkMacSystemFont, sans-serif;
-    padding: 10px 16px;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    white-space: nowrap;
-  `;
-
-  const style = document.createElement('style');
-  style.textContent = `@keyframes __pablo-spin { to { transform: rotate(360deg); } }`;
-
-  container.innerHTML = `
-    <svg width="16" height="16" viewBox="0 0 14 14" style="animation: __pablo-spin 0.8s linear infinite; flex-shrink: 0;">
-      <circle cx="7" cy="7" r="5.5" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
-      <path d="M7 1.5 A5.5 5.5 0 0 1 12.5 7" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"/>
-    </svg>
-    <span id="__pablo-capture-status">${phase}</span>
-  `;
-
-  shadow.appendChild(style);
-  shadow.appendChild(container);
-  document.documentElement.appendChild(captureHostEl);
-  captureStatusEl = shadow.getElementById('__pablo-capture-status') as HTMLSpanElement;
-}
-
-function updateCapturePhase(phase: string): void {
-  if (captureStatusEl) {
-    captureStatusEl.textContent = phase;
-  }
-
-  if (phase === 'Copied!' || phase.startsWith('Error')) {
-    setTimeout(destroyCaptureProgress, 2000);
-  }
-}
-
-function destroyCaptureProgress(): void {
-  if (captureHostEl) {
-    captureHostEl.remove();
-    captureHostEl = null;
-    captureStatusEl = null;
-  }
-}
-
-/**
- * Entry point for post-refresh animation capture.
- * Called by index.ts when CONTINUE_CAPTURE message is received.
- */
-export async function handleContinueCapture(
-  fingerprint: ElementFingerprint,
-  immediatePayload: ClipboardPayload,
-): Promise<void> {
-  showCaptureProgress('Continuing capture…');
-  await continueCapture(fingerprint, immediatePayload, (phase) => {
-    updateCapturePhase(phase);
-  });
 }
 
 function flashGreen(): void {
@@ -800,6 +693,298 @@ function flashGreen(): void {
       }
     }
   }, 1000);
+}
+
+function flashYellow(message: string): void {
+  if (overlayEl) {
+    overlayEl.style.borderColor = '#eab308';
+    overlayEl.style.background = 'rgba(234, 179, 8, 0.15)';
+  }
+  if (labelEl) {
+    labelEl.textContent = message;
+    labelEl.style.background = '#eab308';
+  }
+  setTimeout(() => {
+    if (overlayEl) {
+      overlayEl.style.borderColor = '#3b82f6';
+      overlayEl.style.background = 'rgba(59, 130, 246, 0.1)';
+    }
+    if (labelEl) {
+      labelEl.style.background = '#3b82f6';
+      if (currentTarget) {
+        const tag = currentTarget.tagName.toLowerCase();
+        const className = currentTarget.className && typeof currentTarget.className === 'string'
+          ? '.' + currentTarget.className.trim().split(/\s+/)[0]
+          : '';
+        labelEl.textContent = `${tag}${className} | ${detectedStack}`;
+      }
+    }
+  }, 2000);
+}
+
+// --- Toast UI ---
+
+const BUTTON_BASE_STYLE =
+  'background:transparent; border:1px solid rgba(255,255,255,0.2); color:#fff; padding:6px 12px; border-radius:4px; cursor:pointer; font:inherit;';
+const BUTTON_SUCCESS_STYLE =
+  'background:#22c55e; border:1px solid #22c55e; color:#fff; padding:6px 12px; border-radius:4px; cursor:pointer; font:inherit;';
+const BUTTON_ERROR_STYLE =
+  'background:#ef4444; border:1px solid #ef4444; color:#fff; padding:6px 12px; border-radius:4px; cursor:pointer; font:inherit;';
+const DISMISS_BUTTON_STYLE =
+  'background:transparent; border:1px solid rgba(255,255,255,0.2); color:#fff; padding:6px 8px; border-radius:4px; cursor:pointer; font:inherit; line-height:1;';
+
+function setButtonState(
+  btn: HTMLButtonElement,
+  text: string,
+  variant: 'base' | 'success' | 'error',
+): void {
+  btn.textContent = text;
+  if (variant === 'success') btn.setAttribute('style', BUTTON_SUCCESS_STYLE);
+  else if (variant === 'error') btn.setAttribute('style', BUTTON_ERROR_STYLE);
+  else btn.setAttribute('style', BUTTON_BASE_STYLE);
+}
+
+function flashButtonSuccess(btn: HTMLButtonElement, originalLabel: string): void {
+  setButtonState(btn, 'Copied!', 'success');
+  setTimeout(() => {
+    if (btn.isConnected) setButtonState(btn, originalLabel, 'base');
+  }, 1200);
+}
+
+function triggerDownloadFallback(blob: Blob): void {
+  if (!shadowRoot) return;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'pablo-screenshot.png';
+  a.style.display = 'none';
+  shadowRoot.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    if (a.isConnected) a.remove();
+    URL.revokeObjectURL(url);
+  }, 1000);
+}
+
+function isClipboardWriteAvailable(): boolean {
+  return typeof navigator.clipboard?.write === 'function';
+}
+
+function createToast(hasScreenshot: boolean): HTMLDivElement {
+  const toast = document.createElement('div');
+  toast.className = 'pablo-toast';
+  toast.setAttribute('role', 'status');
+  toast.setAttribute('aria-live', 'polite');
+  toast.setAttribute(
+    'style',
+    'position:fixed; bottom:16px; left:50%; transform:translateX(-50%);' +
+      ' z-index:2147483647; isolation:isolate;' +
+      ' background:rgba(0,0,0,0.88); border-radius:8px;' +
+      ' padding:8px 12px; display:flex; gap:8px; align-items:center;' +
+      ' font:12px/1.4 monospace; color:#fff;' +
+      ' pointer-events:auto; opacity:0; transition:opacity 0.2s ease-out;',
+  );
+
+  const writeAvailable = isClipboardWriteAvailable();
+
+  if (hasScreenshot) {
+    if (writeAvailable) {
+      const copyShot = document.createElement('button');
+      copyShot.dataset.action = 'copy-screenshot';
+      copyShot.textContent = 'Copy Screenshot';
+      copyShot.setAttribute('style', BUTTON_BASE_STYLE);
+      toast.appendChild(copyShot);
+
+      const copyBoth = document.createElement('button');
+      copyBoth.dataset.action = 'copy-both';
+      copyBoth.textContent = 'Copy Both';
+      copyBoth.setAttribute('style', BUTTON_BASE_STYLE);
+      toast.appendChild(copyBoth);
+    } else {
+      // Fallback: only download is available for the image
+      const download = document.createElement('button');
+      download.dataset.action = 'download-screenshot';
+      download.textContent = 'Download Screenshot';
+      download.setAttribute('style', BUTTON_BASE_STYLE);
+      toast.appendChild(download);
+    }
+  }
+
+  const copyContext = document.createElement('button');
+  copyContext.dataset.action = 'copy-context';
+  copyContext.textContent = 'Copy Context';
+  copyContext.setAttribute('style', BUTTON_BASE_STYLE);
+  toast.appendChild(copyContext);
+
+  const dismiss = document.createElement('button');
+  dismiss.dataset.action = 'dismiss';
+  dismiss.setAttribute('aria-label', 'Dismiss');
+  dismiss.textContent = 'x';
+  dismiss.setAttribute('style', DISMISS_BUTTON_STYLE);
+  toast.appendChild(dismiss);
+
+  return toast;
+}
+
+async function copyScreenshot(btn: HTMLButtonElement): Promise<void> {
+  const original = 'Copy Screenshot';
+  if (!pendingScreenshotDataUrl) {
+    setButtonState(btn, 'No data — extract again', 'error');
+    return;
+  }
+  try {
+    const blob = dataUrlToPngBlob(pendingScreenshotDataUrl);
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    flashButtonSuccess(btn, original);
+  } catch (err) {
+    if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'DataError')) {
+      try {
+        const blob = dataUrlToPngBlob(pendingScreenshotDataUrl);
+        setButtonState(btn, 'Failed — downloading', 'error');
+        triggerDownloadFallback(blob);
+      } catch {
+        setButtonState(btn, 'Failed', 'error');
+      }
+      return;
+    }
+    throw err;
+  }
+}
+
+async function copyBoth(btn: HTMLButtonElement): Promise<void> {
+  const original = 'Copy Both';
+  if (!pendingScreenshotDataUrl || !pendingContextText) {
+    setButtonState(btn, 'No data — extract again', 'error');
+    return;
+  }
+  try {
+    const blob = dataUrlToPngBlob(pendingScreenshotDataUrl);
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'image/png': blob,
+        'text/plain': new Blob([pendingContextText], { type: 'text/plain' }),
+      }),
+    ]);
+    flashButtonSuccess(btn, original);
+  } catch (err) {
+    if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'DataError')) {
+      try {
+        const blob = dataUrlToPngBlob(pendingScreenshotDataUrl);
+        setButtonState(btn, 'Failed — downloading', 'error');
+        triggerDownloadFallback(blob);
+      } catch {
+        setButtonState(btn, 'Failed', 'error');
+      }
+      return;
+    }
+    throw err;
+  }
+}
+
+async function copyContext(btn: HTMLButtonElement): Promise<void> {
+  const original = 'Copy Context';
+  if (!pendingContextText) {
+    setButtonState(btn, 'No data — extract again', 'error');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(pendingContextText);
+    flashButtonSuccess(btn, original);
+  } catch {
+    setButtonState(btn, 'Failed to copy', 'error');
+  }
+}
+
+function downloadScreenshot(btn: HTMLButtonElement): void {
+  if (!pendingScreenshotDataUrl) {
+    setButtonState(btn, 'No data — extract again', 'error');
+    return;
+  }
+  try {
+    const blob = dataUrlToPngBlob(pendingScreenshotDataUrl);
+    triggerDownloadFallback(blob);
+    flashButtonSuccess(btn, 'Download Screenshot');
+  } catch {
+    setButtonState(btn, 'Failed', 'error');
+  }
+}
+
+function disableToastButtonsExpired(): void {
+  if (!toastEl) return;
+  const buttons = toastEl.querySelectorAll<HTMLButtonElement>('button[data-action]');
+  for (const btn of Array.from(buttons)) {
+    const action = btn.dataset.action;
+    if (action === 'dismiss') continue;
+    btn.disabled = true;
+    btn.textContent = 'Expired — extract again';
+    btn.setAttribute(
+      'style',
+      'background:transparent; border:1px solid rgba(255,255,255,0.2); color:rgba(255,255,255,0.5); padding:6px 12px; border-radius:4px; cursor:not-allowed; font:inherit;',
+    );
+  }
+}
+
+function showToast(hasScreenshot: boolean): void {
+  if (toastEl) hideToast();
+  if (!shadowRoot) return;
+
+  toastEl = createToast(hasScreenshot);
+  shadowRoot.appendChild(toastEl);
+  toastVisible = true;
+
+  // Entrance animation
+  requestAnimationFrame(() => {
+    if (toastEl) toastEl.style.opacity = '1';
+  });
+
+  // Wire up click handlers
+  toastEl.addEventListener('click', (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const action = target.dataset.action;
+    if (!action) return;
+    e.preventDefault();
+    e.stopPropagation();
+    switch (action) {
+      case 'copy-screenshot':
+        void copyScreenshot(target);
+        break;
+      case 'copy-both':
+        void copyBoth(target);
+        break;
+      case 'copy-context':
+        void copyContext(target);
+        break;
+      case 'download-screenshot':
+        downloadScreenshot(target);
+        break;
+      case 'dismiss':
+        hideToast();
+        break;
+    }
+  });
+
+  // 60-second mandatory data-clear timer
+  if (dataClearTimer) clearTimeout(dataClearTimer);
+  dataClearTimer = setTimeout(() => {
+    pendingScreenshotDataUrl = null;
+    pendingContextText = null;
+    disableToastButtonsExpired();
+  }, 60_000);
+}
+
+function hideToast(): void {
+  if (toastEl) {
+    toastEl.remove();
+    toastEl = null;
+  }
+  toastVisible = false;
+  pendingScreenshotDataUrl = null;
+  pendingContextText = null;
+  if (dataClearTimer) {
+    clearTimeout(dataClearTimer);
+    dataClearTimer = null;
+  }
 }
 
 function onKeyDown(e: KeyboardEvent): void {
@@ -848,13 +1033,13 @@ function onKeyDown(e: KeyboardEvent): void {
 
 export async function activate(
   newMode: InspectorMode,
-  newCaptureContext: CaptureContextLevel = DEFAULT_CAPTURE_CONTEXT,
+  newIncludeScreenshot = true,
 ): Promise<void> {
-  console.log('[Pablo] Overlay activate, mode:', newMode, 'captureContext:', newCaptureContext);
+  console.log('[Pablo] Overlay activate, mode:', newMode, 'includeScreenshot:', newIncludeScreenshot);
   if (active) deactivate();
 
   mode = newMode;
-  captureContext = newCaptureContext;
+  includeScreenshot = newIncludeScreenshot;
   detectedStack = detectStack();
   active = true;
 
@@ -893,6 +1078,15 @@ export function deactivate(): void {
   document.removeEventListener('mousemove', onMouseMove, true);
   document.removeEventListener('click', onClick, true);
   document.removeEventListener('keydown', onKeyDown, true);
+
+  // Clear pending clipboard state before tearing down DOM.
+  pendingScreenshotDataUrl = null;
+  pendingContextText = null;
+  toastVisible = false;
+  if (dataClearTimer) {
+    clearTimeout(dataClearTimer);
+    dataClearTimer = null;
+  }
 
   hideOverlay();
   destroyOverlay();

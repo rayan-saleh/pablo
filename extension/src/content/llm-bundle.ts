@@ -1,6 +1,5 @@
 import type {
   AnimationData,
-  CaptureContextLevel,
   FontData,
   InteractionPattern,
   LlmCaptureBundle,
@@ -15,34 +14,21 @@ interface LlmCaptureLimits {
   maxClassTokens: number;
   maxCssRules: number;
   maxCssTextChars: number;
-  maxAuthoredHtmlChars: number;
   maxInteractiveSelectors: number;
   maxImageUrls: number;
   maxFontFamilies: number;
 }
 
-const LIMITS_BY_CONTEXT: Record<CaptureContextLevel, LlmCaptureLimits> = {
-  basic: {
-    maxScanNodes: 500,
-    maxClassTokens: 400,
-    maxCssRules: 300,
-    maxCssTextChars: 120_000,
-    maxAuthoredHtmlChars: 120_000,
-    maxInteractiveSelectors: 60,
-    maxImageUrls: 120,
-    maxFontFamilies: 40,
-  },
-  deep: {
-    maxScanNodes: 1100,
-    maxClassTokens: 900,
-    maxCssRules: 700,
-    maxCssTextChars: 320_000,
-    maxAuthoredHtmlChars: 320_000,
-    maxInteractiveSelectors: 160,
-    maxImageUrls: 300,
-    maxFontFamilies: 90,
-  },
+const LIMITS: LlmCaptureLimits = {
+  maxScanNodes: 500,
+  maxClassTokens: 300,
+  maxCssRules: 200,
+  maxCssTextChars: 15_000,
+  maxInteractiveSelectors: 40,
+  maxImageUrls: 60,
+  maxFontFamilies: 20,
 };
+
 const GENERIC_FONT_FAMILIES = new Set([
   'serif',
   'sans-serif',
@@ -60,7 +46,6 @@ interface BuildLlmBundleInput {
   selector: string;
   strategy: StrategyKey;
   framework: TechStack;
-  captureContext: CaptureContextLevel;
   styledHtml: string;
   animations?: AnimationData;
   semanticHints?: SemanticHint[];
@@ -69,22 +54,20 @@ interface BuildLlmBundleInput {
 }
 
 export function buildLlmBundle(input: BuildLlmBundleInput): LlmCaptureBundle {
-  const limits = LIMITS_BY_CONTEXT[input.captureContext];
-  const elements = collectElements(input.target, limits.maxScanNodes);
-  const classTokens = collectClassTokens(elements, limits.maxClassTokens);
-  const cssRulesResult = collectMatchedCssRules(elements, limits);
-  const authoredHtmlResult = serializeAuthoredHtml(input.target, limits.maxAuthoredHtmlChars);
+  const elements = collectElements(input.target, LIMITS.maxScanNodes);
+  const classTokens = collectClassTokens(elements, LIMITS.maxClassTokens);
+  const cssRulesResult = collectMatchedCssRules(elements, LIMITS);
   const cssVariables = collectRelevantCssVariables(
     input.target,
     input.styledHtml,
     cssRulesResult.rules,
   );
 
-  const interactiveSelectors = collectInteractiveSelectors(input.target, limits.maxInteractiveSelectors);
+  const interactiveSelectors = collectInteractiveSelectors(input.target, LIMITS.maxInteractiveSelectors);
   const ariaRoles = collectAriaRoles(elements);
-  const imageUrls = collectImageUrls(input.target, limits.maxImageUrls);
+  const imageUrls = collectImageUrls(input.target, LIMITS.maxImageUrls);
   const svgCount = input.target.querySelectorAll('svg').length + (input.target.tagName === 'svg' ? 1 : 0);
-  const fontFamilies = collectFontFamilies(elements, limits.maxFontFamilies, input.fonts);
+  const fontFamilies = collectFontFamilies(elements, LIMITS.maxFontFamilies, input.fonts);
   const semanticRoles = [...new Set((input.semanticHints ?? []).map((h) => h.role))];
   const interactionTypes = [...new Set((input.interactionPatterns ?? []).map((p) => p.type))];
 
@@ -95,10 +78,8 @@ export function buildLlmBundle(input: BuildLlmBundleInput): LlmCaptureBundle {
       tag: input.target.tagName.toLowerCase(),
     },
     structure: {
-      authoredHtml: authoredHtmlResult.html,
-      styledHtml: input.styledHtml,
+      html: input.styledHtml,
       nodeCount: elements.length,
-      ...(authoredHtmlResult.truncated ? { truncated: true } : {}),
     },
     styles: {
       classTokens,
@@ -121,12 +102,11 @@ export function buildLlmBundle(input: BuildLlmBundleInput): LlmCaptureBundle {
     env: {
       framework: input.framework,
       strategy: input.strategy,
-      captureContext: input.captureContext,
       url: window.location.href,
       viewport: { width: window.innerWidth, height: window.innerHeight },
     },
     prompt:
-      'Rebuild this component using semantic HTML and reusable CSS. Prefer class-based styles and extracted cssRules/cssVariables. Use styledHtml only as visual fallback for unresolved runtime styles. Preserve interaction behavior and animation summary.',
+      'Rebuild this component using semantic HTML and reusable CSS. Prefer class-based styles and extracted cssRules/cssVariables. Use the inlined html only as a visual fallback for unresolved runtime styles. Preserve interaction behavior and animation summary.',
   };
 }
 
@@ -262,99 +242,12 @@ function matchesAny(elements: Element[], selector: string): boolean {
   return false;
 }
 
-function serializeAuthoredHtml(target: Element, maxAuthoredHtmlChars: number): { html: string; truncated: boolean } {
-  const clone = target.cloneNode(true) as Element;
-
-  for (const bad of Array.from(clone.querySelectorAll('script, noscript'))) {
-    bad.remove();
-  }
-
-  const nodes = [clone, ...Array.from(clone.querySelectorAll('*'))];
-  for (const node of nodes) {
-    absolutizeUrlAttributes(node);
-    sanitizeInlineStyle(node);
-  }
-
-  let html = clone.outerHTML;
-  let truncated = false;
-  if (html.length > maxAuthoredHtmlChars) {
-    html = html.slice(0, maxAuthoredHtmlChars) + '\n<!-- ...truncated -->';
-    truncated = true;
-  }
-  return { html, truncated };
-}
-
-function absolutizeUrlAttributes(node: Element): void {
-  if (node.tagName === 'IMG' || node.tagName === 'SOURCE' || node.tagName === 'VIDEO') {
-    const src = node.getAttribute('src');
-    if (src) node.setAttribute('src', safeUrl(src));
-    const srcset = node.getAttribute('srcset');
-    if (srcset) node.setAttribute('srcset', absolutizeSrcset(srcset));
-    const poster = node.getAttribute('poster');
-    if (poster) node.setAttribute('poster', safeUrl(poster));
-  }
-
-  if (node.tagName === 'A') {
-    const href = node.getAttribute('href');
-    if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
-      node.setAttribute('href', safeUrl(href));
-    }
-  }
-}
-
-function sanitizeInlineStyle(node: Element): void {
-  const style = node.getAttribute('style');
-  if (!style) return;
-
-  const entries = style
-    .split(';')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => {
-      const idx = part.indexOf(':');
-      if (idx === -1) return null;
-      const prop = part.slice(0, idx).trim().toLowerCase();
-      const value = part.slice(idx + 1).trim();
-      return { prop, value };
-    })
-    .filter((x): x is { prop: string; value: string } => !!x);
-
-  const filtered = entries.filter(({ prop, value }) => {
-    // Runtime transform noise from animation libraries
-    if (prop === 'transform') return false;
-    // Keep meaningful opacity but drop default animated noise
-    if (prop === 'opacity' && (value === '1' || value === '0')) return false;
-    return true;
-  });
-
-  if (filtered.length === 0) {
-    node.removeAttribute('style');
-    return;
-  }
-
-  node.setAttribute(
-    'style',
-    filtered.map(({ prop, value }) => `${prop}: ${value}`).join('; '),
-  );
-}
-
 function safeUrl(url: string): string {
   try {
     return new URL(url, document.baseURI).href;
   } catch {
     return url;
   }
-}
-
-function absolutizeSrcset(srcset: string): string {
-  return srcset
-    .split(',')
-    .map((entry) => {
-      const parts = entry.trim().split(/\s+/);
-      if (parts[0]) parts[0] = safeUrl(parts[0]);
-      return parts.join(' ');
-    })
-    .join(', ');
 }
 
 function collectRelevantCssVariables(target: Element, styledHtml: string, cssRules: string[]): Record<string, string> {

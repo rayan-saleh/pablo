@@ -7,11 +7,6 @@ import type {
   PseudoState,
   ActiveAnimationData,
   ScrollTriggerData,
-  GsapData,
-  DomMutationRecording,
-  EntranceAnimationData,
-  ScrollAnimationData,
-  InteractionAnimationData,
 } from '../shared/types';
 
 const MAX_SUBTREE_ELEMENTS = 200;
@@ -404,59 +399,6 @@ function generateSummary(data: Partial<AnimationData>): string {
     parts.push(gsapParts.join(', '));
   }
 
-  if (data.domRecording) {
-    parts.push(`DOM mutation recording: ${data.domRecording.mutations.length} mutation(s) over ${data.domRecording.duration}ms`);
-  }
-
-  if (data.entranceAnimations) {
-    const ea = data.entranceAnimations;
-    const eaParts: string[] = [];
-    if (ea.webAnimationSnapshots.length > 0) {
-      eaParts.push(`${ea.webAnimationSnapshots.length} animation(s)`);
-    }
-    if (ea.computedStyleDiffs.length > 0) {
-      eaParts.push(`${ea.computedStyleDiffs.length} style diff(s)`);
-    }
-    if (ea.domMutations.length > 0) {
-      eaParts.push(`${ea.domMutations.length} mutation(s)`);
-    }
-    if (eaParts.length > 0) {
-      parts.push(`Entrance animations: ${eaParts.join(', ')} over ${ea.duration}ms`);
-    }
-  }
-
-  if (data.scrollAnimations) {
-    const sa = data.scrollAnimations;
-    const saParts: string[] = [];
-    if (sa.intersectionObserverTriggered) saParts.push('IntersectionObserver triggered');
-    if (sa.webAnimationSnapshots.length > 0) saParts.push(`${sa.webAnimationSnapshots.length} animation(s)`);
-    if (sa.computedStyleDiffs.length > 0) saParts.push(`${sa.computedStyleDiffs.length} style diff(s)`);
-    if (sa.domMutations.length > 0) saParts.push(`${sa.domMutations.length} mutation(s)`);
-    if (saParts.length > 0) {
-      parts.push(`Scroll animations: ${saParts.join(', ')} over ${sa.duration}ms`);
-    }
-  }
-
-  if (data.interactionAnimations) {
-    const ia = data.interactionAnimations;
-    const iaParts: string[] = [];
-    if (ia.hover) {
-      const count = ia.hover.webAnimations.length + ia.hover.computedStyleDiffs.length + ia.hover.domMutations.length;
-      if (count > 0) iaParts.push(`hover (${count} change(s))`);
-    }
-    if (ia.click) {
-      const count = ia.click.webAnimations.length + ia.click.computedStyleDiffs.length + ia.click.domMutations.length;
-      if (count > 0) iaParts.push(`click (${count} change(s))`);
-    }
-    if (ia.focus) {
-      const count = ia.focus.webAnimations.length + ia.focus.computedStyleDiffs.length + ia.focus.domMutations.length;
-      if (count > 0) iaParts.push(`focus (${count} change(s))`);
-    }
-    if (iaParts.length > 0) {
-      parts.push(`Interaction animations: ${iaParts.join(', ')}`);
-    }
-  }
-
   return parts.join('. ') + (parts.length > 0 ? '.' : '');
 }
 
@@ -564,18 +506,6 @@ export function mergeAnimationData(
   if (partial.gsap?.detected) {
     merged.gsap = partial.gsap;
   }
-  if (partial.domRecording) {
-    merged.domRecording = partial.domRecording;
-  }
-  if (partial.entranceAnimations) {
-    merged.entranceAnimations = partial.entranceAnimations;
-  }
-  if (partial.scrollAnimations) {
-    merged.scrollAnimations = partial.scrollAnimations;
-  }
-  if (partial.interactionAnimations) {
-    merged.interactionAnimations = partial.interactionAnimations;
-  }
 
   // Check if there's any data at all
   const hasData =
@@ -587,11 +517,7 @@ export function mergeAnimationData(
     merged.scrollTriggers.length > 0 ||
     merged.framerMotion.length > 0 ||
     merged.webflowIX2.length > 0 ||
-    merged.gsap?.detected ||
-    merged.domRecording ||
-    merged.entranceAnimations ||
-    merged.scrollAnimations ||
-    merged.interactionAnimations;
+    merged.gsap?.detected;
 
   if (!hasData) return undefined;
 

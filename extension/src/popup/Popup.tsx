@@ -1,26 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import type { InspectorMode, InspectorStatus, TechStack, CaptureContextLevel } from '../shared/types';
+import type { InspectorMode, InspectorStatus, TechStack } from '../shared/types';
 import { STACK_DISPLAY_NAMES } from '../shared/types';
 import { MSG, type ExtensionMessage } from '../shared/messages';
-import { DEFAULT_CAPTURE_CONTEXT } from '../shared/capture-policy';
 import { ModeToggle } from './components/ModeToggle';
 
-const CAPTURE_CONTEXT_STORAGE_KEY = 'captureContextLevel';
-const CAPTURE_LEVELS: CaptureContextLevel[] = ['basic', 'deep'];
+const INCLUDE_SCREENSHOT_STORAGE_KEY = 'includeScreenshot';
 
 export function Popup() {
   const [mode, setMode] = useState<InspectorMode>('component');
   const [status, setStatus] = useState<InspectorStatus>('ready');
   const [stack, setStack] = useState<TechStack | null>(null);
   const [lastCopy, setLastCopy] = useState<{ tag: string; size: number } | null>(null);
-  const [captureContext, setCaptureContext] = useState<CaptureContextLevel>(DEFAULT_CAPTURE_CONTEXT);
+  const [includeScreenshot, setIncludeScreenshot] = useState<boolean>(true);
 
   useEffect(() => {
-    chrome.storage.local.get(CAPTURE_CONTEXT_STORAGE_KEY, (result) => {
+    // Wipe stale slider preference (one-shot migration).
+    chrome.storage.local.remove('captureContextLevel', () => {
       void chrome.runtime.lastError;
-      const saved = result?.[CAPTURE_CONTEXT_STORAGE_KEY];
-      if (saved === 'basic' || saved === 'deep') {
-        setCaptureContext(saved);
+    });
+
+    chrome.storage.local.get(INCLUDE_SCREENSHOT_STORAGE_KEY, (result) => {
+      void chrome.runtime.lastError;
+      const saved = result?.[INCLUDE_SCREENSHOT_STORAGE_KEY];
+      if (typeof saved === 'boolean') {
+        setIncludeScreenshot(saved);
       }
     });
 
@@ -56,8 +59,8 @@ export function Popup() {
   }
 
   function handleStart() {
-    console.log('[Pablo] User action: start, mode:', mode, 'captureContext:', captureContext);
-    sendToActiveTab({ type: MSG.ACTIVATE_INSPECTOR, mode, captureContext });
+    console.log('[Pablo] User action: start, mode:', mode, 'includeScreenshot:', includeScreenshot);
+    sendToActiveTab({ type: MSG.ACTIVATE_INSPECTOR, mode, includeScreenshot });
     setStatus('inspecting');
     window.close();
   }
@@ -68,17 +71,14 @@ export function Popup() {
     setStatus('ready');
   }
 
-  const isInspecting = status === 'inspecting';
-  const captureLevelIndex = CAPTURE_LEVELS.indexOf(captureContext);
-
-  function handleCaptureLevelChange(nextIndex: number): void {
-    const bounded = Math.min(CAPTURE_LEVELS.length - 1, Math.max(0, nextIndex));
-    const nextLevel = CAPTURE_LEVELS[bounded];
-    setCaptureContext(nextLevel);
-    chrome.storage.local.set({ [CAPTURE_CONTEXT_STORAGE_KEY]: nextLevel }, () => {
+  function handleScreenshotToggle(next: boolean) {
+    setIncludeScreenshot(next);
+    chrome.storage.local.set({ [INCLUDE_SCREENSHOT_STORAGE_KEY]: next }, () => {
       void chrome.runtime.lastError;
     });
   }
+
+  const isInspecting = status === 'inspecting';
 
   const statusConfig: Record<InspectorStatus, { text: string; color: string }> = {
     ready: { text: '$ ready', color: 'border border-pablo-border bg-white/[0.03] text-pablo-muted' },
@@ -95,10 +95,9 @@ export function Popup() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <img
-            src={chrome.runtime.getURL('icons/logo.svg')}
+            src={chrome.runtime.getURL('icons/icon-128.png')}
             alt="Pablo"
-            className="w-5 h-5"
-            style={{ filter: 'brightness(0) invert(1)' }}
+            className="w-5 h-5 object-contain"
           />
           <h1 className="text-sm font-semibold tracking-tight text-pablo-text lowercase">pablo</h1>
         </div>
@@ -122,27 +121,16 @@ export function Popup() {
       {/* Mode toggle */}
       <ModeToggle mode={mode} onChange={setMode} disabled={isInspecting} />
 
-      {/* Capture context slider */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] text-pablo-muted">capture context</span>
-          <span className="text-[11px] font-medium text-pablo-primary capitalize">{captureContext}</span>
-        </div>
+      {/* Screenshot toggle */}
+      <label className="flex items-center justify-between gap-2 text-[11px] text-pablo-muted cursor-pointer select-none">
+        <span>capture screenshot</span>
         <input
-          type="range"
-          min={0}
-          max={1}
-          step={1}
-          value={captureLevelIndex}
-          onChange={(e) => handleCaptureLevelChange(Number(e.target.value))}
+          type="checkbox"
+          checked={includeScreenshot}
+          onChange={(e) => handleScreenshotToggle(e.target.checked)}
           disabled={isInspecting}
-          className="w-full"
         />
-        <div className="flex justify-between text-[9px] text-pablo-dim">
-          <span>basic</span>
-          <span>deep</span>
-        </div>
-      </div>
+      </label>
 
       {/* Instructions */}
       <p className="text-[11px] leading-relaxed text-pablo-dim">
@@ -154,7 +142,7 @@ export function Popup() {
       {/* Copy feedback */}
       {lastCopy && status === 'copied' && (
         <div className="text-[11px] text-[#28c840] animate-fade-in">
-          <span className="text-pablo-dim">$</span> copied &lt;{lastCopy.tag}&gt; — {(lastCopy.size / 1024).toFixed(1)} KB
+          <span className="text-pablo-dim">$</span> extracted &lt;{lastCopy.tag}&gt; — use in-page buttons to copy
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import type { InspectorMode, InspectorStatus, ExtractionMeta, ElementFingerprint, ClipboardPayload, CaptureContextLevel } from './types';
+import type { InspectorMode, InspectorStatus, ExtractionMeta } from './types';
 
 export const MSG = {
   ACTIVATE_INSPECTOR: 'ACTIVATE_INSPECTOR',
@@ -9,19 +9,13 @@ export const MSG = {
   PROBE_REACT: 'PROBE_REACT',
   COLLECT_FIBER: 'COLLECT_FIBER',
   COLLECT_GSAP: 'COLLECT_GSAP',
-  START_ANIMATION_CAPTURE: 'START_ANIMATION_CAPTURE',
-  CONTENT_SCRIPT_READY: 'CONTENT_SCRIPT_READY',
-  CONTINUE_CAPTURE: 'CONTINUE_CAPTURE',
-  CAPTURE_PHASE_UPDATE: 'CAPTURE_PHASE_UPDATE',
-  COLLECT_ENTRANCE_ANIMATIONS: 'COLLECT_ENTRANCE_ANIMATIONS',
-  COLLECT_INTERSECTION_DATA: 'COLLECT_INTERSECTION_DATA',
   CAPTURE_SCREENSHOT: 'CAPTURE_SCREENSHOT',
 } as const;
 
 export type ActivateInspectorMsg = {
   type: typeof MSG.ACTIVATE_INSPECTOR;
   mode: InspectorMode;
-  captureContext: CaptureContextLevel;
+  includeScreenshot: boolean;
 };
 
 export type DeactivateInspectorMsg = {
@@ -55,36 +49,6 @@ export type CollectGsapMsg = {
   type: typeof MSG.COLLECT_GSAP;
 };
 
-export type StartAnimationCaptureMsg = {
-  type: typeof MSG.START_ANIMATION_CAPTURE;
-  fingerprint: ElementFingerprint;
-  immediatePayload: ClipboardPayload;
-  url: string;
-};
-
-export type ContentScriptReadyMsg = {
-  type: typeof MSG.CONTENT_SCRIPT_READY;
-};
-
-export type ContinueCaptureMsg = {
-  type: typeof MSG.CONTINUE_CAPTURE;
-  fingerprint: ElementFingerprint;
-  immediatePayload: ClipboardPayload;
-};
-
-export type CapturePhaseUpdateMsg = {
-  type: typeof MSG.CAPTURE_PHASE_UPDATE;
-  phase: string;
-};
-
-export type CollectEntranceAnimationsMsg = {
-  type: typeof MSG.COLLECT_ENTRANCE_ANIMATIONS;
-};
-
-export type CollectIntersectionDataMsg = {
-  type: typeof MSG.COLLECT_INTERSECTION_DATA;
-};
-
 export type CaptureScreenshotMsg = {
   type: typeof MSG.CAPTURE_SCREENSHOT;
   rect: { x: number; y: number; width: number; height: number };
@@ -100,10 +64,4 @@ export type ExtensionMessage =
   | ProbeReactMsg
   | CollectFiberMsg
   | CollectGsapMsg
-  | StartAnimationCaptureMsg
-  | ContentScriptReadyMsg
-  | ContinueCaptureMsg
-  | CapturePhaseUpdateMsg
-  | CollectEntranceAnimationsMsg
-  | CollectIntersectionDataMsg
   | CaptureScreenshotMsg;
