@@ -4,7 +4,7 @@ import { githubRepoUrl, supportUrl, websiteUrl } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Privacy Policy | Pablo",
   description:
-    "Privacy policy for the Pablo Chrome extension, including what data is handled locally, what is stored, and how to get support.",
+    "Privacy policy for the Pablo Chrome extension, including what data is handled locally and what is stored.",
 };
 
 const sections = [
@@ -40,7 +40,7 @@ export default function PrivacyPage() {
             Pablo keeps the extraction flow local and straightforward.
           </h1>
           <p className="max-w-2xl text-sm leading-6 text-[#a0a8b8]">
-            This policy applies to the Pablo Chrome extension and the support pages available at{" "}
+            This policy applies to the Pablo Chrome extension available at{" "}
             <a className="text-[#d9dee7] underline decoration-white/20 underline-offset-4" href={websiteUrl}>
               {websiteUrl}
             </a>.
@@ -63,15 +63,9 @@ export default function PrivacyPage() {
           <h2 className="text-sm font-semibold text-[#eef2f8]">Contact</h2>
           <p className="mt-3 text-sm leading-6 text-[#a0a8b8]">
             If you have a privacy question, want to report an issue, or need help with the extension,
-            use the support page or open an issue on GitHub.
+            open an issue on GitHub.
           </p>
           <div className="mt-4 flex flex-wrap gap-3 text-sm">
-            <a
-              href="/support"
-              className="border border-white/[0.12] px-4 py-2 text-[#d9dee7] transition-all duration-150 hover:border-white/[0.2]"
-            >
-              Open support page
-            </a>
             <a
               href={supportUrl}
               target="_blank"

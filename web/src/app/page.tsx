@@ -1,9 +1,10 @@
 import { ShowcaseCard } from "@/components/ShowcaseCard";
 import { VideoEmbed } from "@/components/VideoEmbed";
 import { StripeMock } from "@/components/mocks/StripeMock";
-import { WebflowMock } from "@/components/mocks/WebflowMock";
+import { WebflowAddOnsMock } from "@/components/mocks/WebflowAddOnsMock";
 import { FloatingIconsHeroMock } from "@/components/mocks/FloatingIconsHeroMock";
 import { FloatingIconsHeroCopied } from "@/components/mocks/FloatingIconsHeroCopied";
+import { DotTxtHeroMock } from "@/components/mocks/DotTxtHeroMock";
 import { chromeWebStoreUrl, githubRepoUrl } from "@/lib/site";
 
 function GitHubIcon({ className = "h-5 w-5" }: { className?: string }) {
@@ -33,21 +34,7 @@ const showcaseItems: Array<{
   description: string;
   imagePath: string;
   Mock?: React.ComponentType;
-}> = [
-  {
-    siteName: "Webflow",
-    strategy: "webflow",
-    description: "IX2 interactions, scroll animations, entrance effects",
-    imagePath: "/showcase/webflow.png",
-    Mock: WebflowMock,
-  },
-  {
-    siteName: ".txt",
-    strategy: "react",
-    description: "Oversized mono hero, JSON block, CTA chips and blink cursor",
-    imagePath: "/showcase/txt.png",
-  },
-];
+}> = [];
 
 const steps = [
   {
@@ -201,11 +188,47 @@ export default function Home() {
             >
               <StripeMock />
             </ShowcaseCard>
+            <ShowcaseCard
+              siteName="Webflow"
+              strategy="webflow"
+              description="IX2 interactions, scroll animations, entrance effects"
+              imagePath="/showcase/webflow-addons.png"
+              lhsContent={
+                <div className="absolute inset-0 flex items-center justify-center bg-[#0b0d12] p-5">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/showcase/webflow-addons.png"
+                    alt="Webflow Add-ons screenshot"
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+              }
+            >
+              <WebflowAddOnsMock />
+            </ShowcaseCard>
             {showcaseItems.map(({ Mock, ...item }) => (
               <ShowcaseCard key={item.siteName} {...item}>
                 {Mock ? <Mock /> : null}
               </ShowcaseCard>
             ))}
+            <ShowcaseCard
+              siteName=".txt"
+              strategy="react"
+              description="Pixel hero, terminal CLI demo, schema-contract popup"
+              imagePath="/showcase/txt.png"
+              lhsContent={
+                <div className="absolute inset-0 flex items-center justify-center bg-[#0b0d12] p-9">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/showcase/txt.png"
+                    alt=".txt screenshot"
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+              }
+            >
+              <DotTxtHeroMock />
+            </ShowcaseCard>
             <ShowcaseCard
               siteName="Floating Icons Hero"
               strategy="react"

@@ -50,18 +50,6 @@ function Nav() {
         </a>
         <div className="flex items-center gap-2">
           <a
-            href="/privacy"
-            className="hidden h-[34px] items-center px-3.5 text-[11.8px] font-medium text-[#a0a8b8] border border-white/[0.12] bg-white/[0.01] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7] hover:bg-white/[0.04] sm:flex"
-          >
-            Privacy
-          </a>
-          <a
-            href="/support"
-            className="hidden h-[34px] items-center px-3.5 text-[11.8px] font-medium text-[#a0a8b8] border border-white/[0.12] bg-white/[0.01] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7] hover:bg-white/[0.04] sm:flex"
-          >
-            Support
-          </a>
-          <a
             href={chromeWebStoreUrl}
             className="flex h-[34px] items-center px-3.5 text-[11.8px] font-medium text-[#a0a8b8] border border-white/[0.12] bg-white/[0.01] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7] hover:bg-white/[0.04]"
           >
@@ -97,12 +85,6 @@ function Footer() {
             className="flex h-[34px] items-center px-3.5 text-[11.8px] font-medium text-[#a0a8b8] border border-white/[0.12] bg-white/[0.01] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7]"
           >
             Privacy
-          </a>
-          <a
-            href="/support"
-            className="flex h-[34px] items-center px-3.5 text-[11.8px] font-medium text-[#a0a8b8] border border-white/[0.12] bg-white/[0.01] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7]"
-          >
-            Support
           </a>
           <a
             href={githubRepoUrl}
