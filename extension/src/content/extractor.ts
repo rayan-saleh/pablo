@@ -50,7 +50,7 @@ function formatHtml(html: string): string {
     const isTag = token.startsWith('<');
 
     if (!isTag) {
-      // Text content — will be handled inline with surrounding tags where possible
+      // Text content; handled inline with surrounding tags where possible
       lines.push(indent() + token.trim());
       continue;
     }
@@ -432,7 +432,7 @@ function getDefaultStyles(tagName: string): Map<string, string> {
     defaults.set(prop, computed.getPropertyValue(prop));
   }
 
-  // Correct for the properties we manually set on the reference element —
+  // Correct for the properties we manually set on the reference element,
   // otherwise real defaults (position:static, visibility:visible) appear as non-default
   defaults.set('position', 'static');
   defaults.set('visibility', 'visible');
@@ -454,7 +454,7 @@ function applyComputedStyles(original: Element, clone: Element, frameworkDefault
     const cloneEl = cloneElements[i];
     if (!origEl || !cloneEl) continue;
 
-    // Skip computed style extraction for SVG child elements — they use
+    // Skip computed style extraction for SVG child elements; they use
     // attributes (d, fill, viewBox, etc.) rather than CSS box-model properties.
     // Applying box-model styles to <path>, <rect>, etc. just adds noise.
     const isSvgChild = origEl.namespaceURI === 'http://www.w3.org/2000/svg' && origEl.tagName !== 'svg';
@@ -486,7 +486,7 @@ function applyComputedStyles(original: Element, clone: Element, frameworkDefault
       // Skip z-index on statically positioned elements (it has no effect)
       if (position === 'static' && prop === 'z-index') continue;
 
-      // Simplify transforms — skip identity, convert matrix to readable form
+      // Simplify transforms: skip identity, convert matrix to readable form
       if (prop === 'transform') {
         const simplified = simplifyTransform(value);
         if (simplified === null) continue; // identity

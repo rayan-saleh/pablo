@@ -16,7 +16,7 @@ body {
   background: rgba(122, 162, 247, 0.3);
 }
 
-/* Dashed separator — matches landing page */
+/* Dashed separator. Matches landing page */
 .dashed-separator {
   background-image: repeating-linear-gradient(
     to right,

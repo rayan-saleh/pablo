@@ -142,7 +142,7 @@ export function Popup() {
       {/* Copy feedback */}
       {lastCopy && status === 'copied' && (
         <div className="text-[11px] text-[#28c840] animate-fade-in">
-          <span className="text-pablo-dim">$</span> extracted &lt;{lastCopy.tag}&gt; — use in-page buttons to copy
+          <span className="text-pablo-dim">$</span> extracted &lt;{lastCopy.tag}&gt;. Use in-page buttons to copy
         </div>
       )}
 

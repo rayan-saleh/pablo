@@ -79,7 +79,7 @@ export function ShowcaseCard({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
       >
-        {/* Copied layer (bottom — revealed as slider moves right) */}
+        {/* Copied layer (bottom, revealed as slider moves right) */}
         <div className="absolute inset-0 isolate">
           <span className="absolute right-3 top-3 z-10 border border-dashed border-[#7aa2f7]/30 bg-[#7aa2f7]/10 px-2 py-0.5 text-[9.3px] font-medium uppercase tracking-wider text-[#7aa2f7]">
             Copied with Pablo
@@ -89,7 +89,7 @@ export function ShowcaseCard({
           </div>
         </div>
 
-        {/* Original layer (top — clipped to left portion) */}
+        {/* Original layer (top, clipped to left portion) */}
         <div
           className="absolute inset-0 isolate"
           style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }}

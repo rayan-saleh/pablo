@@ -160,7 +160,7 @@ function extractPseudoStateStyles(element: Element): PseudoStateStyles {
     try {
       rules = sheet.cssRules;
     } catch {
-      // Cross-origin stylesheet — skip
+      // Cross-origin stylesheet, skip
       continue;
     }
 

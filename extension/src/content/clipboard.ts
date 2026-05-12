@@ -1,6 +1,6 @@
 /**
  * Synchronously convert a data:image/png;base64,... URL to a Blob.
- * MUST be synchronous — using fetch(dataUrl) crosses an async boundary
+ * MUST be synchronous: using fetch(dataUrl) crosses an async boundary
  * that can drop the user-activation token required by clipboard.write().
  */
 export function dataUrlToPngBlob(dataUrl: string): Blob {

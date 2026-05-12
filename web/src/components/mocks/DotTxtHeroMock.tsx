@@ -182,7 +182,7 @@ export function DotTxtHeroMock() {
       style={{ fontFamily: SANS_FONT, opacity: entered ? 1 : 0, transition: "opacity 500ms" }}
     >
       <div className="grid grid-cols-[1.55fr_1fr_148px] grid-rows-[200px_200px] gap-3">
-        {/* TOP-LEFT: pink — api.dottxt.ai platform */}
+        {/* TOP-LEFT: pink, api.dottxt.ai platform */}
         <div
           className="relative flex flex-col justify-between border border-black p-4"
           style={{ backgroundColor: PINK }}
@@ -222,7 +222,7 @@ export function DotTxtHeroMock() {
           </div>
         </div>
 
-        {/* TOP-MIDDLE: sage — interactive slider */}
+        {/* TOP-MIDDLE: sage, interactive slider */}
         <div
           className="relative flex flex-col border border-black p-4"
           style={{ backgroundColor: SAGE }}
@@ -322,7 +322,7 @@ export function DotTxtHeroMock() {
           </div>
         </div>
 
-        {/* BOTTOM-LEFT: mustard — descriptive copy + icon row */}
+        {/* BOTTOM-LEFT: mustard, descriptive copy + icon row */}
         <div
           className="relative flex flex-col justify-between border border-black p-4"
           style={{ backgroundColor: MUSTARD }}
@@ -366,7 +366,7 @@ export function DotTxtHeroMock() {
           </div>
         </div>
 
-        {/* BOTTOM-MIDDLE: black — pixel rocket */}
+        {/* BOTTOM-MIDDLE: black, pixel rocket */}
         <div className="relative flex items-center justify-center overflow-hidden border border-black bg-black">
           <PixelRocket />
         </div>

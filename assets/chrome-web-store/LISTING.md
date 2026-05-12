@@ -29,7 +29,7 @@ Source of truth: `extension/public/manifest.json` `description` field. If you ch
 ```
 Pablo turns any website into a component library.
 
-Hover any element, click once, and the full HTML + CSS lands on your clipboard — ready to paste into your editor, design tool, or AI coding agent.
+Hover any element, click once, and the full HTML + CSS lands on your clipboard, ready to paste into your editor, design tool, or AI coding agent.
 
 WHAT PABLO CAPTURES
 • Production-ready HTML structure (semantic, not flattened)
@@ -41,17 +41,17 @@ WHAT PABLO CAPTURES
 • Optional screenshot of the captured element for visual context
 
 FRAMEWORK-AWARE
-Pablo detects the stack behind the page — React, Next.js, Webflow, Framer, Shopify, WordPress — and picks the right extraction strategy. Webflow IX2 interactions, Framer Motion props, and React component boundaries are preserved rather than flattened to raw markup.
+Pablo detects the stack behind the page (React, Next.js, Webflow, Framer, Shopify, WordPress) and picks the right extraction strategy. Webflow IX2 interactions, Framer Motion props, and React component boundaries are preserved rather than flattened to raw markup.
 
 TWO CAPTURE MODES
-• Component mode — hover, click, copy a single element with its children.
-• Page mode — capture the full visible page content in one shot.
+• Component mode. Hover, click, copy a single element with its children.
+• Page mode. Capture the full visible page content in one shot.
 
 DESIGNED FOR THE AI WORKFLOW
 The output is shaped for pasting directly into Claude, Cursor, ChatGPT, or any coding agent. Bundled context (HTML + CSS + fonts + animations + screenshot) gives the model everything it needs to recreate the component in your stack.
 
 PRIVACY
-Pablo runs entirely in your browser. Nothing is sent to a server — no telemetry, no account, no cloud capture. The only network calls are the ones the page itself makes.
+Pablo runs entirely in your browser. Nothing is sent to a server. No telemetry, no account, no cloud capture. The only network calls are the ones the page itself makes.
 
 OPEN SOURCE
 MIT licensed. Source, issues, and roadmap at https://github.com/rayan-saleh/pablo
@@ -62,18 +62,18 @@ Website and demo at https://usepablo.dev
 
 Stored in `assets/chrome-web-store/screenshots/` at 1280×800:
 
-1. `01-overview.png` — landing-page-style overview shot with the in-page copy bar visible.
-2. `02-popup.png` — extension popup at current version, showing detected stack, mode toggle, capture screenshot toggle, and `start inspecting`.
-3. `03-element-highlight.png` — overlay highlighting a single element on a real site (Stripe).
-4. `04-copied-output.png` — focused shot of the in-page "Copy Screenshot / Copy Both / Copy Context" floating bar.
-5. `05-full-page-mode.png` — `page` mode active.
+1. `01-overview.png`: landing-page-style overview shot with the in-page copy bar visible.
+2. `02-popup.png`: extension popup at current version, showing detected stack, mode toggle, capture screenshot toggle, and `start inspecting`.
+3. `03-element-highlight.png`: overlay highlighting a single element on a real site (Stripe).
+4. `04-copied-output.png`: focused shot of the in-page "Copy Screenshot / Copy Both / Copy Context" floating bar.
+5. `05-full-page-mode.png`: `page` mode active.
 
 ### Promotional images
 
 Stored in `assets/chrome-web-store/promotional/`:
 
-- `small-promo-440x280.png` — small promo tile (required for category placement).
-- `marquee-1400x560.png` — marquee tile (optional, for featuring).
+- `small-promo-440x280.png`: small promo tile (required for category placement).
+- `marquee-1400x560.png`: marquee tile (optional, for featuring).
 
 ## Privacy practices
 
@@ -83,10 +83,10 @@ Stored in `assets/chrome-web-store/promotional/`:
 
 ### Permission justifications
 
-- **activeTab** — Required so Pablo can read the DOM of the tab the user is currently looking at when they click the toolbar icon. Without it, Pablo cannot inspect the element the user wants to capture.
-- **scripting** — Required to inject the inspector overlay, element highlight, and extraction logic into the active tab on demand. Pablo does not inject any scripts until the user clicks "start inspecting".
-- **clipboardWrite** — Required to place the captured HTML + CSS bundle on the user's clipboard so they can paste it into their editor or AI tool.
-- **storage** — Required to remember small UI preferences across sessions (last mode used, "capture screenshot" toggle state). Nothing identifying or sensitive is stored.
+- **activeTab**: required so Pablo can read the DOM of the tab the user is currently looking at when they click the toolbar icon. Without it, Pablo cannot inspect the element the user wants to capture.
+- **scripting**: required to inject the inspector overlay, element highlight, and extraction logic into the active tab on demand. Pablo does not inject any scripts until the user clicks "start inspecting".
+- **clipboardWrite**: required to place the captured HTML + CSS bundle on the user's clipboard so they can paste it into their editor or AI tool.
+- **storage**: required to remember small UI preferences across sessions (last mode used, "capture screenshot" toggle state). Nothing identifying or sensitive is stored.
 
 ### Host permissions
 

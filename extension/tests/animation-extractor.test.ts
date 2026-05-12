@@ -11,7 +11,7 @@ import {
 //
 // Helpers that touch live DOM/getComputedStyle (extractAnimations,
 // extractPseudoStateStyles, processPseudoRule) are intentionally not unit-
-// tested here — they need a real document. Manual verification (see plan
+// tested here; they need a real document. Manual verification (see plan
 // Test Plan section) covers them.
 
 interface FakeElement extends Partial<Element> {

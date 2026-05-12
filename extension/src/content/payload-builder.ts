@@ -325,7 +325,7 @@ export function truncateHtml(html: string, maxBytes: number): { html: string; re
         last.end = leaf.closeEnd;
         last.count++;
       } else if (last && leaf.openStart < last.end) {
-        // overlap (shouldn't happen for siblings) — skip
+        // overlap (shouldn't happen for siblings), skip
         continue;
       } else {
         merged.push({ start: leaf.openStart, end: leaf.closeEnd, count: 1 });
@@ -581,7 +581,7 @@ function fmtAnimations(animations?: AnimationData): string {
     lines.push(`- **Active animation:** ${active.animationName} { ${tStr} }`);
   }
 
-  // TODO(phase-2): empirical base64 screenshot spike — see .omc/plans/hover-context-enhanced-textual.md
+  // TODO(phase-2): empirical base64 screenshot spike. See .omc/plans/hover-context-enhanced-textual.md
   if (animations.stateStyles) {
     const pseudoLines = formatPseudoStateSections(
       animations.stateStyles,
@@ -645,7 +645,7 @@ function fmtFonts(fonts?: FontData): string {
     const bits = [ff.family];
     if (ff.weight) bits.push(`weight ${ff.weight}`);
     if (ff.style) bits.push(`style ${ff.style}`);
-    lines.push(`- ${bits.join(' — ')}`);
+    lines.push(`- ${bits.join(' · ')}`);
   }
   if (fonts.pseudoContent.length > 0) {
     for (const pc of fonts.pseudoContent.slice(0, 6)) {

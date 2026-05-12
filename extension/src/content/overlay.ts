@@ -391,7 +391,7 @@ function inferSemanticRoles(element: Element): SemanticHint[] {
 function detectInteractionPatterns(element: Element): InteractionPattern[] {
   const patterns: InteractionPattern[] = [];
 
-  // Pattern 1: hover-text-slide — duplicate text where one instance has opacity:0
+  // Pattern 1: hover-text-slide. Duplicate text where one instance has opacity:0
   const textMap = new Map<string, Element[]>();
   const allEls = Array.from(element.querySelectorAll('*'));
   for (const el of allEls) {
@@ -412,13 +412,13 @@ function detectInteractionPatterns(element: Element): InteractionPattern[] {
     if (hasHidden) {
       patterns.push({
         type: 'hover-text-slide',
-        description: `Duplicate text "${text.slice(0, 40)}" with one instance at opacity:0 — likely hover slide/reveal animation`,
+        description: `Duplicate text "${text.slice(0, 40)}" with one instance at opacity:0, likely hover slide/reveal animation`,
         elements: elements.map(el => buildRelativeSelector(element, el)),
       });
     }
   }
 
-  // Pattern 2: clip-reveal — overflow:hidden parent with transformed children
+  // Pattern 2: clip-reveal. overflow:hidden parent with transformed children
   for (const el of allEls) {
     if (!(el instanceof HTMLElement)) continue;
     const style = window.getComputedStyle(el);
@@ -432,7 +432,7 @@ function detectInteractionPatterns(element: Element): InteractionPattern[] {
         if (n !== 'matrix(1,0,0,1,0,0)' && n !== 'matrix3d(1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1)') {
           patterns.push({
             type: 'clip-reveal',
-            description: 'overflow:hidden parent with transformed child — likely clip/reveal animation',
+            description: 'overflow:hidden parent with transformed child, likely clip/reveal animation',
             elements: [buildRelativeSelector(element, el), buildRelativeSelector(element, child)],
           });
           break; // one per parent
@@ -639,7 +639,7 @@ async function handleExtraction(target: Element): Promise<void> {
     hideExtracting();
     if (result.truncated) {
       const overKb = (result.oversize / 1024).toFixed(1);
-      console.log(`[Pablo] truncated — ${overKb} KB over cap`);
+      console.log(`[Pablo] truncated: ${overKb} KB over cap`);
     }
     showToast(!!pendingScreenshotDataUrl);
   } catch (err) {
@@ -823,7 +823,7 @@ function createToast(hasScreenshot: boolean): HTMLDivElement {
 async function copyScreenshot(btn: HTMLButtonElement): Promise<void> {
   const original = 'Copy Screenshot';
   if (!pendingScreenshotDataUrl) {
-    setButtonState(btn, 'No data — extract again', 'error');
+    setButtonState(btn, 'No data. Extract again', 'error');
     return;
   }
   try {
@@ -834,7 +834,7 @@ async function copyScreenshot(btn: HTMLButtonElement): Promise<void> {
     if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'DataError')) {
       try {
         const blob = dataUrlToPngBlob(pendingScreenshotDataUrl);
-        setButtonState(btn, 'Failed — downloading', 'error');
+        setButtonState(btn, 'Failed. Downloading', 'error');
         triggerDownloadFallback(blob);
       } catch {
         setButtonState(btn, 'Failed', 'error');
@@ -848,7 +848,7 @@ async function copyScreenshot(btn: HTMLButtonElement): Promise<void> {
 async function copyContext(btn: HTMLButtonElement): Promise<void> {
   const original = 'Copy Context';
   if (!pendingContextText) {
-    setButtonState(btn, 'No data — extract again', 'error');
+    setButtonState(btn, 'No data. Extract again', 'error');
     return;
   }
   try {
@@ -861,7 +861,7 @@ async function copyContext(btn: HTMLButtonElement): Promise<void> {
 
 function downloadScreenshot(btn: HTMLButtonElement): void {
   if (!pendingScreenshotDataUrl) {
-    setButtonState(btn, 'No data — extract again', 'error');
+    setButtonState(btn, 'No data. Extract again', 'error');
     return;
   }
   try {
@@ -880,7 +880,7 @@ function disableToastButtonsExpired(): void {
     const action = btn.dataset.action;
     if (action === 'dismiss') continue;
     btn.disabled = true;
-    btn.textContent = 'Expired — extract again';
+    btn.textContent = 'Expired. Extract again';
     btn.setAttribute(
       'style',
       'background:transparent; border:1px solid rgba(255,255,255,0.2); color:rgba(255,255,255,0.5); padding:6px 12px; border-radius:4px; cursor:not-allowed; font:inherit;',
@@ -1019,7 +1019,7 @@ export async function activate(
   if (detectedStack === 'generic') {
     const isReact = await probeReactViaServiceWorker();
     if (isReact) {
-      console.log('[Pablo] Async React probe confirmed React — upgrading stack');
+      console.log('[Pablo] Async React probe confirmed React, upgrading stack');
       detectedStack = 'react';
     }
   }

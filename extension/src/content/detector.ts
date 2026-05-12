@@ -100,7 +100,7 @@ function detectStackInner(): TechStack {
 
   // --- Parent frameworks ---
 
-  // React — DOM-only heuristics that work from isolated world
+  // React. DOM-only heuristics that work from isolated world
   if (probeReactDOM()) {
     return 'react';
   }
@@ -133,7 +133,7 @@ function detectStackInner(): TechStack {
 
 /**
  * DOM-only heuristics for React detection that work from the isolated world.
- * No inline scripts needed — checks attributes and asset patterns.
+ * No inline scripts needed; checks attributes and asset patterns.
  */
 function probeReactDOM(): boolean {
   // 1. [data-reactroot] attribute (classic React)
