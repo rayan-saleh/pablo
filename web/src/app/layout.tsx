@@ -3,7 +3,7 @@ import "./globals.css";
 import { chromeWebStoreUrl, githubRepoUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://getpablo.dev"),
+  metadataBase: new URL("https://usepablo.dev"),
   title: "Pablo. Recreate any UI component from the web.",
   description:
     "Pablo is a Chrome extension that lets you hover over any component, click, and get HTML + CSS on your clipboard. Fonts, animations, GSAP, Framer Motion, Webflow IX2, and more.",
@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     title: "Pablo. Recreate any UI component from the web.",
     description:
       "Hover over any element, click, and get HTML + CSS on your clipboard. Fonts, animations, and all.",
-    url: "https://getpablo.dev",
+    url: "https://usepablo.dev",
     siteName: "Pablo",
     type: "website",
     images: [

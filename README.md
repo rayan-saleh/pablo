@@ -8,7 +8,7 @@ Copy UI from the web.
 
 Pablo is a Chrome extension that lets you hover an element, click it, and copy clean HTML + CSS to your clipboard.
 
-[Watch demo](./web/public/demo.mp4) · [Chrome Web Store](https://chromewebstore.google.com) · [Website](https://getpablo.dev)
+[Watch demo](./web/public/demo.mp4) · [Chrome Web Store](https://chromewebstore.google.com/detail/pablo/bchhpiepnmnghliknoamagdpgonlpfbl) · [Website](https://usepablo.dev)
 
 [![Pablo demo](./web/public/demo.gif)](./web/public/demo.mp4)
 
@@ -48,19 +48,13 @@ then test, build, zip, and attach the extension package to the GitHub release.
 
 ## Website Deploys
 
-The website auto-deploy path lives in `.github/workflows/deploy-web.yml`.
+The website (`web/`) auto-deploys through Vercel's git integration.
 
-- Pushes to `main` create a production Vercel deployment from `web/`
-- Pull requests to `main` create preview deployments from `web/`
+- Pushes to `main` create a production deployment at [usepablo.dev](https://usepablo.dev)
+- Pull requests to `main` get preview deployments
 - Manual fallback: `cd web && vercel --prod --yes`
 
-GitHub repository secrets required for the workflow:
-
-- `VERCEL_TOKEN`
-
-The current Vercel org/project IDs are embedded in the workflow from the linked `web/.vercel/project.json`.
-If you relink the website to a different Vercel project later, update `.github/workflows/deploy-web.yml` to match.
-If you want `https://getpablo.dev` to resolve, that custom domain still needs to be configured in the Vercel project itself.
+The custom domain `usepablo.dev` is configured in the Vercel project.
 
 ## License
 
