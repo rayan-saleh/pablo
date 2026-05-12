@@ -28,14 +28,6 @@ function ChromeIcon({ className = "h-5 w-5" }: { className?: string }) {
   );
 }
 
-const showcaseItems: Array<{
-  siteName: string;
-  strategy: string;
-  description: string;
-  imagePath: string;
-  Mock?: React.ComponentType;
-}> = [];
-
 const steps = [
   {
     number: "1",
@@ -206,11 +198,6 @@ export default function Home() {
             >
               <WebflowAddOnsMock />
             </ShowcaseCard>
-            {showcaseItems.map(({ Mock, ...item }) => (
-              <ShowcaseCard key={item.siteName} {...item}>
-                {Mock ? <Mock /> : null}
-              </ShowcaseCard>
-            ))}
             <ShowcaseCard
               siteName=".txt"
               strategy="react"

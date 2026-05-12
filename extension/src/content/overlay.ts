@@ -444,54 +444,6 @@ function detectInteractionPatterns(element: Element): InteractionPattern[] {
   return patterns;
 }
 
-// --- Component Summary ---
-
-function generateComponentSummary(element: Element, semanticHints?: SemanticHint[]): string {
-  const rect = element.getBoundingClientRect();
-  const parts: string[] = [];
-
-  // Dimensions
-  parts.push(`${Math.round(rect.width)}x${Math.round(rect.height)}px`);
-
-  // Layout type
-  const style = window.getComputedStyle(element);
-  if (style.display.includes('flex')) parts.push('flex container');
-  else if (style.display.includes('grid')) parts.push('grid container');
-  else parts.push(style.display + ' container');
-
-  // Headings
-  const headings = element.querySelectorAll('h1, h2, h3, h4, h5, h6');
-  for (const h of Array.from(headings).slice(0, 2)) {
-    const text = h.textContent?.trim();
-    if (text) parts.push(`heading: "${text.length > 60 ? text.slice(0, 60) + '...' : text}"`);
-  }
-
-  // Buttons/CTAs
-  const buttons = element.querySelectorAll('a, button');
-  const buttonTexts: string[] = [];
-  for (const btn of Array.from(buttons).slice(0, 3)) {
-    const text = btn.textContent?.trim();
-    if (text && text.length < 40) buttonTexts.push(`"${text}"`);
-  }
-  if (buttonTexts.length > 0) parts.push(`buttons: ${buttonTexts.join(', ')}`);
-
-  // Images
-  const imgCount = element.querySelectorAll('img').length;
-  if (imgCount > 0) parts.push(`${imgCount} image${imgCount > 1 ? 's' : ''}`);
-
-  // Videos
-  const videoCount = element.querySelectorAll('video').length;
-  if (videoCount > 0) parts.push(`${videoCount} video${videoCount > 1 ? 's' : ''}`);
-
-  // Semantic roles summary
-  if (semanticHints && semanticHints.length > 0) {
-    const roles = [...new Set(semanticHints.map(h => h.role))];
-    parts.push(`contains: ${roles.join(', ')}`);
-  }
-
-  return parts.join(' | ');
-}
-
 // --- Event handlers ---
 
 function onMouseMove(e: MouseEvent): void {
@@ -588,7 +540,6 @@ async function handleExtraction(target: Element): Promise<void> {
     const interactionPatterns = detectInteractionPatterns(extractionTarget);
     const fonts = extractFonts(extractionTarget);
     console.log('[Pablo] Font extraction:', fonts.fontFaces.length, 'font-faces,', fonts.pseudoContent.length, 'pseudo-elements');
-    void generateComponentSummary(extractionTarget, semanticHints);
 
     const selector = buildSelector(extractionTarget);
     const llmBundle = buildLlmBundle({
@@ -666,60 +617,6 @@ async function handleExtraction(target: Element): Promise<void> {
       status: 'error',
     });
   }
-}
-
-function flashGreen(): void {
-  if (overlayEl) {
-    overlayEl.style.borderColor = '#22c55e';
-    overlayEl.style.background = 'rgba(34, 197, 94, 0.15)';
-  }
-  if (labelEl) {
-    labelEl.textContent = 'Copied!';
-    labelEl.style.background = '#22c55e';
-  }
-  setTimeout(() => {
-    if (overlayEl) {
-      overlayEl.style.borderColor = '#3b82f6';
-      overlayEl.style.background = 'rgba(59, 130, 246, 0.1)';
-    }
-    if (labelEl) {
-      labelEl.style.background = '#3b82f6';
-      if (currentTarget) {
-        const tag = currentTarget.tagName.toLowerCase();
-        const className = currentTarget.className && typeof currentTarget.className === 'string'
-          ? '.' + currentTarget.className.trim().split(/\s+/)[0]
-          : '';
-        labelEl.textContent = `${tag}${className} | ${detectedStack}`;
-      }
-    }
-  }, 1000);
-}
-
-function flashYellow(message: string): void {
-  if (overlayEl) {
-    overlayEl.style.borderColor = '#eab308';
-    overlayEl.style.background = 'rgba(234, 179, 8, 0.15)';
-  }
-  if (labelEl) {
-    labelEl.textContent = message;
-    labelEl.style.background = '#eab308';
-  }
-  setTimeout(() => {
-    if (overlayEl) {
-      overlayEl.style.borderColor = '#3b82f6';
-      overlayEl.style.background = 'rgba(59, 130, 246, 0.1)';
-    }
-    if (labelEl) {
-      labelEl.style.background = '#3b82f6';
-      if (currentTarget) {
-        const tag = currentTarget.tagName.toLowerCase();
-        const className = currentTarget.className && typeof currentTarget.className === 'string'
-          ? '.' + currentTarget.className.trim().split(/\s+/)[0]
-          : '';
-        labelEl.textContent = `${tag}${className} | ${detectedStack}`;
-      }
-    }
-  }, 2000);
 }
 
 // --- Toast UI ---
