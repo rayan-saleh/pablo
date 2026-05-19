@@ -46,7 +46,7 @@ export const SECTION_BUDGETS = {
   cssVariables: { target: 1_500, hardCap: 3_000 },
   animations: { target: 3_000, hardCap: 6_000 },
   interactions: { target: 2_000, hardCap: 4_000 },
-  fonts: { target: 500, hardCap: 1_000 },
+  fonts: { target: 1_500, hardCap: 3_000 },
   componentTree: { target: 2_000, hardCap: 4_000 },
   prompt: { target: 500, hardCap: 800 },
 } as const;
@@ -640,20 +640,27 @@ function fmtInteractions(input: PayloadInput): string {
 
 function fmtFonts(fonts?: FontData): string {
   if (!fonts) return '';
-  const lines: string[] = [];
+  const blocks: string[] = [];
+
   for (const ff of fonts.fontFaces) {
-    const bits = [ff.family];
-    if (ff.weight) bits.push(`weight ${ff.weight}`);
-    if (ff.style) bits.push(`style ${ff.style}`);
-    lines.push(`- ${bits.join(' · ')}`);
+    const decls = [`font-family: "${ff.family}";`, `src: ${ff.src};`];
+    if (ff.weight) decls.push(`font-weight: ${ff.weight};`);
+    if (ff.style) decls.push(`font-style: ${ff.style};`);
+    if (ff.display) decls.push(`font-display: ${ff.display};`);
+    if (ff.unicodeRange) decls.push(`unicode-range: ${ff.unicodeRange};`);
+    blocks.push(`@font-face {\n  ${decls.join('\n  ')}\n}`);
   }
-  if (fonts.pseudoContent.length > 0) {
-    for (const pc of fonts.pseudoContent.slice(0, 6)) {
-      lines.push(`- ${pc.selector}${pc.pseudo}: content="${pc.content.slice(0, 40)}" font="${pc.fontFamily}"`);
-    }
+
+  for (const pc of fonts.pseudoContent.slice(0, 6)) {
+    const decls = [`content: ${pc.content};`];
+    if (pc.fontFamily) decls.push(`font-family: ${pc.fontFamily};`);
+    if (pc.fontSize) decls.push(`font-size: ${pc.fontSize};`);
+    if (pc.color) decls.push(`color: ${pc.color};`);
+    blocks.push(`${pc.selector}${pc.pseudo} {\n  ${decls.join('\n  ')}\n}`);
   }
-  if (lines.length === 0) return '';
-  return `## Fonts\n${lines.join('\n')}`;
+
+  if (blocks.length === 0) return '';
+  return `## Fonts\n${fenceBlock('css', blocks.join('\n\n'))}`;
 }
 
 function fmtComponentTree(tree: ComponentTree | undefined, maxDepth = 4): string {
@@ -749,7 +756,7 @@ export function buildMarkdownPayload(input: PayloadInput): BuildPayloadResult {
     interactionsSection = truncateLines(interactionsSection, SECTION_BUDGETS.interactions.hardCap).text;
   }
   if (fontsSection.length > SECTION_BUDGETS.fonts.hardCap) {
-    fontsSection = truncateLines(fontsSection, SECTION_BUDGETS.fonts.hardCap).text;
+    fontsSection = truncateFenced(fontsSection, SECTION_BUDGETS.fonts.hardCap).text;
   }
   if (componentTreeSection.length > SECTION_BUDGETS.componentTree.hardCap) {
     componentTreeSection = truncateLines(componentTreeSection, SECTION_BUDGETS.componentTree.hardCap).text;

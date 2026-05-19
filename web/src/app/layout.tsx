@@ -40,6 +40,14 @@ function GitHubIcon({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+function ChromeIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 0C8.21 0 4.831 1.757 2.632 4.501l3.953 6.848A5.454 5.454 0 0 1 12 6.545h10.691A12 12 0 0 0 12 0zM1.931 5.47A11.943 11.943 0 0 0 0 12c0 6.012 4.42 10.991 10.189 11.864l3.953-6.847a5.45 5.45 0 0 1-6.865-2.29zm13.342 2.166a5.446 5.446 0 0 1 1.45 7.09l.002.001h-.002l-5.344 9.257c.206.01.413.016.621.016 6.627 0 12-5.373 12-12 0-1.54-.29-3.011-.818-4.364zM12 16.364a4.364 4.364 0 1 1 0-8.728 4.364 4.364 0 0 1 0 8.728Z" />
+    </svg>
+  );
+}
+
 function Nav() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/[0.08] bg-[#0a0b10]/90 backdrop-blur-xl">
@@ -53,6 +61,7 @@ function Nav() {
             href={chromeWebStoreUrl}
             className="flex h-[34px] items-center px-3.5 text-[11.8px] font-medium text-[#a0a8b8] border border-white/[0.12] bg-white/[0.01] transition-all duration-150 hover:border-white/[0.2] hover:text-[#d9dee7] hover:bg-white/[0.04]"
           >
+            <ChromeIcon className="mr-1.5 h-3.5 w-3.5 text-[#7aa2f7]" />
             Install
           </a>
           <a

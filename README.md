@@ -18,6 +18,13 @@ Click the toolbar icon, hover any element, and click. Pablo reads the live DOM, 
 
 Unlike DevTools "Copy outerHTML", the output is production-ready: resolved styles, fonts, and animations included, component structure preserved instead of flattened. Runs entirely in the browser. No servers, no account.
 
+## Privacy
+
+No network calls, no analytics, no account. Pablo reads the DOM, writes to your clipboard, and stops there.
+
+- Manifest permissions: `activeTab`, `scripting`, `clipboardWrite`, `storage` ([manifest.json](./extension/public/manifest.json))
+- Verify yourself: `grep -rE "fetch\(|XMLHttpRequest|sendBeacon|WebSocket" extension/src` returns only one match, a `fetch()` on a local `data:` URL ([background/main.ts](./extension/src/background/main.ts)) used to decode an in-memory screenshot. No remote endpoints.
+
 ## Install
 
 ```bash
