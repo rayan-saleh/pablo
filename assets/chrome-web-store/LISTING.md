@@ -12,7 +12,7 @@ Live listing: https://chromewebstore.google.com/detail/pablo/bchhpiepnmnghliknoa
 
 ### Summary (short description, 132 char max)
 
-> Copy any UI component from the web. Hover, click, get production-ready HTML + CSS with fonts, animations, GSAP & Framer Motion.
+> Copy any UI component from the web. Hover, click, get clean HTML + CSS with fonts, animations, GSAP & Framer Motion.
 
 Source of truth: `extension/public/manifest.json` `description` field. If you change one, change both.
 
@@ -32,7 +32,7 @@ Pablo turns any website into a component library.
 Hover any element, click once, and the full HTML + CSS lands on your clipboard, ready to paste into your editor, design tool, or AI coding agent.
 
 WHAT PABLO CAPTURES
-• Production-ready HTML structure (semantic, not flattened)
+• Semantic HTML structure (not flattened)
 • Resolved CSS, including custom properties and computed styles
 • Web fonts and @font-face declarations
 • CSS animations and keyframes

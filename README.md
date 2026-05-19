@@ -16,14 +16,14 @@ Pablo is a Chrome extension that lets you hover an element, click it, and copy c
 
 Click the toolbar icon, hover any element, and click. Pablo reads the live DOM, computed CSS, web fonts, keyframes, GSAP timelines, and Framer Motion props, detects the site's stack (React, Next, Webflow, Framer, Shopify, WordPress), and copies a clean HTML + CSS bundle to your clipboard, ready to paste into your editor or AI agent.
 
-Unlike DevTools "Copy outerHTML", the output is production-ready: resolved styles, fonts, and animations included, component structure preserved instead of flattened. Runs entirely in the browser. No servers, no account.
+Unlike DevTools "Copy outerHTML", the output keeps resolved styles, fonts, animations, and component structure instead of a flat DOM dump. Runs entirely in the browser. No servers, no account.
 
 ## Privacy
 
 No network calls, no analytics, no account. Pablo reads the DOM, writes to your clipboard, and stops there.
 
 - Manifest permissions: `activeTab`, `scripting`, `clipboardWrite`, `storage` ([manifest.json](./extension/public/manifest.json))
-- Verify yourself: `grep -rE "fetch\(|XMLHttpRequest|sendBeacon|WebSocket" extension/src` returns only one match, a `fetch()` on a local `data:` URL ([background/main.ts](./extension/src/background/main.ts)) used to decode an in-memory screenshot. No remote endpoints.
+- Verify yourself: `grep -rE "fetch\(|XMLHttpRequest|sendBeacon|WebSocket" extension/src` — the only call site is a local `data:` URL in [background/main.ts](./extension/src/background/main.ts), used to decode an in-memory screenshot.
 
 ## Install
 
